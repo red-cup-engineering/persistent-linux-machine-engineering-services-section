@@ -22,5 +22,9 @@
   },
   "exports": {
     "./service": "./scripts/service.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/persistent-linux-machine-engineering-services-section.git"
   }
 }

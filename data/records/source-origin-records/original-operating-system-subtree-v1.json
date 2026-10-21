@@ -1,0 +1,15 @@
+{
+  "kind": "original-operating-system-section-source-receiving",
+  "repository": "red-cup-engineering/computer-operating-system-services-section",
+  "commit": "df875d1dc2ca7c855245912386a3565bbab80309",
+  "path": "services/linux-services-section/services/persistent-linux-machine-engineering-services-section",
+  "tree": "e34111517efe85b65366b02e9f291a5b41728f1f",
+  "canonicalRepository": "red-cup-engineering/persistent-linux-machine-engineering-services-section",
+  "originalImportCommit": "c48d914a9e2552e8950ce1bdf4c0e169c3787116",
+  "originalSourceHistoryRetained": true,
+  "functionalCodeUnchanged": true,
+  "grade": "source ownership and composition only; no new registry, installed or native operating receipt",
+  "originalObligations": [
+    "Original workspace dependency coordinates remain; native supplier and registry qualification are separate."
+  ]
+}
