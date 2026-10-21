@@ -1,0 +1,11 @@
+{
+  "name": "@red-cup-engineering/ci-runner-host-service",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Makes a Linux host a GitHub Actions runner from one parameter record: pinned and verified install, adopted or token-registered, bounded disk, priority-scheduled unit.",
+  "files": ["scripts", "specifications", "src"],
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=22" },
+  "bin": { "ci-runner-host": "./scripts/ci-runner-host.mjs" },
+  "exports": { ".": "./src/ci-runner-host.mjs" }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@red-cup-engineering/persistent-linux-machine-engineering-services-section",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Groups services, application faces, and single-effect scripts for one persistent Linux machine.",
+  "files": [
+    "apps",
+    "scripts",
+    "services",
+    "types"
+  ],
+  "dependencies": {
+    "@red-cup-engineering/computer-filepath-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/execute-javascript-node-command-service": "workspace:*",
+    "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    "./service": "./scripts/service.mjs"
+  }
+}
