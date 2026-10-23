@@ -81,4 +81,3 @@ test('missing, offline, wrong-label, incomplete and unavailable runner observati
  assert.equal(read({total_count:2,runners:[native]}).state,'unknown');
  assert.equal(readRunnerRegistration(runner,{run:()=>{throw Error('private details must not surface');}}).state,'unknown');
 });
-
