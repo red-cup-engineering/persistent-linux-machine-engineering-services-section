@@ -17,6 +17,15 @@ record (operations) --plan--> items {current | drift, measured}
                     \-apply--> root/{versions/<v>, runner/, hooks/} + user unit + slice
 ```
 
+The host owner selects this root within its section's data tree. On Bare Cedar
+Fog the qualified runner record selects `data/state/ci-runner-host-state` under
+the Bare Cedar Fog services section, and the download cache is separately owned
+under that section's data tree. The former requirement to place a runner outside
+every Git working tree contradicted the settled owning-section data requirement;
+Git repository containment does not authorize a scan, publication or cleanup of
+the runner's private registration or work files. Existing name/scope custody and
+resource admission still govern adoption and installation.
+
 Under `root`:
 
 - `versions/<v>/`: the unpacked runner, verified by SHA-256 (CR-3).
