@@ -26,7 +26,7 @@ Each requirement has one shall. Identifiers are stable.
 
 ## Placement and lifecycle
 
-- CR-5. The service shall keep everything a runner owns (versions, registration, work folder, diagnostics) under one root directory from the record, outside any git working tree and apart from other tools' files.
+- CR-5. The service shall keep everything a runner owns (versions, registration, work folder, diagnostics) under one root directory selected by the host owner's record within that section's data tree and apart from other tools' files.
 - CR-6. The service shall keep the work folder bounded. After every job, through the runner's job-completed hook, it shall remove the job's temporary files and every workspace not named in the record's `retain` list. Retained workspaces are caches that make the next job cheaper.
 - CR-7. The service shall delete runner diagnostic logs older than the record's retention days.
 
