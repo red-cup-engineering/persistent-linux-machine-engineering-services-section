@@ -4,7 +4,7 @@ import {
   readFileSync, writeFileSync, existsSync, lstatSync, statSync, readdirSync, mkdirSync, renameSync,
   rmSync, chmodSync, copyFileSync,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, isAbsolute } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -28,6 +28,48 @@ export const paths = (r) => ({
   runner: join(r.root, 'runner'), version: join(r.root, 'versions', r.version),
   hook: join(r.root, 'hooks', 'job-completed.sh'), work: join(r.root, 'runner', '_work'), diag: join(r.root, 'runner', '_diag'),
 });
+
+/** The original GitHub supplier has fixed scope-bound methods, never a shell. */
+export function registrationInvocation(r, method = 'GET') {
+  const executable=r.registration?.executable;
+  if(typeof executable!=='string'||!isAbsolute(executable)||/[\r\n\0]/.test(executable))throw new TypeError('absolute GitHub CLI supplier required');
+  const url=new URL(r.scope), parts=url.pathname.replace(/\/$/,'').split('/').filter(Boolean);
+  if(url.protocol!=='https:'||url.hostname!=='github.com'||url.port||url.username||url.password||url.search||url.hash
+      || ![1,2].includes(parts.length)||parts.some(p=>!/^[A-Za-z0-9_.-]+$/.test(p)||['.','..'].includes(p)))
+    throw new TypeError('exact GitHub organization or repository scope required');
+  if(!['GET','POST'].includes(method))throw new TypeError('runner metadata or registration-token method required');
+  const scope=(parts.length===1?'/orgs/':'/repos/')+parts.join('/');
+  const endpoint=scope+'/actions/runners'+(method==='POST'?'/registration-token':'?per_page=100');
+  return {executable,args:['api','--hostname','github.com','--method',method,endpoint,...(method==='POST'?['--jq','.token']:[])]};
+}
+
+/** Actual registered scope/labels; an incomplete or inaccessible list is unknown. */
+export function readRunnerRegistration(r,{run=execFileSync}={}){
+  const invocation=registrationInvocation(r);
+  try{
+    const result=JSON.parse(run(invocation.executable,invocation.args,{encoding:'utf8',timeout:10000,maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']}));
+    if(!Array.isArray(result.runners)||result.total_count!==result.runners.length||result.runners.length>100)
+      return {state:'unknown',reason:'incomplete-runner-metadata'};
+    const found=result.runners.filter(item=>item.name===r.name);
+    if(found.length===0)return {state:'absent',scope:r.scope};
+    const runner=found[0],labels=runner.labels?.map(label=>label.name);
+    if(found.length!==1||!Number.isSafeInteger(runner.id)||runner.id<1||!Array.isArray(labels)||labels.some(label=>typeof label!=='string'))
+      return {state:'unknown',reason:'ambiguous-runner-metadata'};
+    return {state:runner.status==='online'&&(r.labels??[]).every(label=>labels.includes(label))?'current':'drift',
+      id:runner.id,name:runner.name,scope:r.scope,status:runner.status,busy:runner.busy===true,labels};
+  }catch{return {state:'unknown',reason:'runner-metadata-unavailable'};}
+}
+
+export const tarballPath = r => r.tarball ?? join(tmpdir(),`actions-runner-linux-x64-${r.version}.tar.gz`);
+
+/** Native config failures must never retain their token-bearing argv in an Error. */
+export function configureRunner(r,token,{run=execFileSync}={}){
+  if(typeof token!=='string'||!token||/[\r\n\0]/.test(token))throw new Error('registration supplier returned no single-use token');
+  const p=paths(r);
+  try{run(join(p.runner,'config.sh'),['--unattended','--url',r.scope,'--token',token,'--name',r.name,
+    '--labels',(r.labels??[]).join(','),'--work','_work','--disableupdate'],{cwd:p.runner,stdio:'ignore'});}
+  catch{throw new Error('native runner registration failed; token and native diagnostics withheld');}
+}
 
 /** The systemd user unit (CR-8, CR-9): priority by weights and nice, one hard ceiling, never MemoryHigh. */
 export function renderUnit(r) {
@@ -142,6 +184,10 @@ export function observe(record) {
     const reg = existsSync(join(p.runner, '.runner')) ? JSON.parse(readFileSync(join(p.runner, '.runner'), 'utf8').replace(/^﻿/, '')) : null;
     add(`CR-1 ${tag} registration`, !!reg && reg.agentName === r.name && reg.gitHubUrl === r.scope,
       reg ? `${reg.agentName} -> ${reg.gitHubUrl}` : `no registration under ${p.runner}`);
+    if(r.registration){
+      const registered=readRunnerRegistration(r);
+      add(`CR-15 ${tag} registered resource`,registered.state==='current',JSON.stringify(registered));
+    }
     const same = isVersion(p.runner, p.version);
     add(`CR-3 ${tag} version`, same, same ? `runs ${r.version} (hard links into ${p.version})` : `runner binaries are not the pinned ${r.version}`);
     const old = r.adopt?.from && existsSync(join(r.adopt.from, '.runner'));
@@ -204,11 +250,12 @@ async function ensureVersion(r, log) {
     log.push(`kept the adopted runner's ${r.version} binaries as ${p.version}`);
     return;
   }
-  const tarball = r.tarball && existsSync(r.tarball) ? r.tarball : join(tmpdir(), `actions-runner-linux-x64-${r.version}.tar.gz`);
+  const tarball = tarballPath(r);
   if (!existsSync(tarball)) {
     const url = `https://github.com/actions/runner/releases/download/v${r.version}/actions-runner-linux-x64-${r.version}.tar.gz`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`download ${url}: HTTP ${res.status}`);
+    mkdirSync(dirname(tarball),{recursive:true});
     writeFileSync(tarball, Buffer.from(await res.arrayBuffer()));
   }
   const sum = createHash('sha256').update(readFileSync(tarball)).digest('hex');
@@ -232,13 +279,44 @@ function adopt(r, log, now) {
   return true;
 }
 
-function register(r, log) {
+function assertRegistrationIdentity(r) {
+  const file=join(paths(r).runner,'.runner');
+  if(!existsSync(file))return false;
+  const registered=JSON.parse(readFileSync(file,'utf8').replace(/^﻿/,''));
+  if(registered.agentName!==r.name||registered.gitHubUrl!==r.scope)throw new Error('existing runner registration identity differs; reconcile original custody');
+  return registered;
+}
+
+/** Absence and retained native identity are the only registration admissions. */
+export function preflightRunnerRegistration(r,{run=execFileSync}={}){
+  const local=assertRegistrationIdentity(r);
+  const remote=readRunnerRegistration(r,{run});
+  if(!local){
+    if(remote.state!=='absent')throw new Error('new runner requires explicit same-scope remote absence');
+  }else if(!['current','drift'].includes(remote.state)||!Number.isSafeInteger(local.agentId)||local.agentId!==remote.id){
+    throw new Error('retained local and remote runner identity is unreceived');
+  }
+  return {local:local?{id:local.agentId,name:local.agentName,scope:local.gitHubUrl}:null,remote};
+}
+
+function acquireRegistrationToken(r,invocation,run){
+  try{
+    const raw=invocation?run(invocation.executable,invocation.args,{encoding:'utf8',timeout:10000,maxBuffer:65536,stdio:['ignore','pipe','ignore']})
+      :run('bash',['-c',r.credentialCommand],{encoding:'utf8',stdio:['ignore','pipe','ignore']});
+    const token=String(raw).trim();
+    if(!token||/[\r\n\0]/.test(token))throw new Error('invalid token supplier result');
+    return token;
+  }catch{throw Object.assign(new Error('runner registration token supplier failed; native diagnostics withheld'),{code:'runner-registration-token-unavailable'});}
+}
+
+export function registerRunner(r, log, {run=execFileSync}={}) {
   const p = paths(r);
-  if (existsSync(join(p.runner, '.runner'))) return;
-  if (!r.credentialCommand) throw new Error(`[${r.name}] nothing to adopt and no credentialCommand to obtain a registration token`);
-  const token = execFileSync('bash', ['-c', r.credentialCommand], { encoding: 'utf8' }).trim();
-  execFileSync(join(p.runner, 'config.sh'), ['--unattended', '--url', r.scope, '--token', token, '--name', r.name,
-    '--labels', (r.labels ?? []).join(','), '--work', '_work', '--replace', '--disableupdate'], { cwd: p.runner, stdio: 'ignore' });
+  if(r.registration)preflightRunnerRegistration(r,{run});
+  if (assertRegistrationIdentity(r)) return;
+  if (!r.credentialCommand&&!r.registration) throw new Error(`[${r.name}] nothing to adopt and no registration supplier`);
+  const invocation=r.registration?registrationInvocation(r,'POST'):null;
+  const token = acquireRegistrationToken(r,invocation,run);
+  configureRunner(r,token);
   log.push(`registered ${r.name} with ${r.scope}`);
 }
 
@@ -267,15 +345,18 @@ function link(r, log) {
   for (const s of SCRIPTS) if (existsSync(join(p.version, s)) && !existsSync(join(p.runner, s))) copyFileSync(join(p.version, s), join(p.runner, s));
 }
 
-export async function apply(record, { now = false } = {}) {
+export async function apply(record, { now = false, registrationRun=execFileSync } = {}) {
   const log = [];
   for (const r of record.runners) {
+    if(r.registration)registrationInvocation(r,'POST');
+    assertRegistrationIdentity(r);
+    if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
     const p = paths(r);
     const adopted = adopt(r, log, now);
     if (adopted === null) continue;
     await ensureVersion(r, log);
     link(r, log);
-    register(r, log);
+    registerRunner(r, log,{run:registrationRun});
     writeIfChanged(p.hook, renderHook(r), log, 0o755);
     const envPath = join(p.runner, '.env');
     writeIfChanged(envPath, mergeEnv(text(envPath), HOOK_KEY, p.hook), log);

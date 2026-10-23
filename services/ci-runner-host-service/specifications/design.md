@@ -34,6 +34,11 @@ Under `root`:
 - **Node built-ins only.** The service runs where Node 22+ is available. The tarball is fetched with `fetch` and unpacked with the system `tar`.
 
 ## Parameter record
+Structured apply preflights complete same-scope native metadata before any download/link effect, and again immediately before a registration token. A missing local registration needs explicit remote absence; a retained local registration needs the exact native remote agent id. Unknown/ambiguous/incomplete state and a remote occupied name refuse. Native configuration never receives --replace, so a concurrent remote claim cannot be overwritten. Token-supplier failures retain only a fixed public class; original Error/stdout/stderr/cause and token-bearing argv never enter diagnostics.
+
+The optional structured registration supplier is `registration: {executable: <absolute gh path>}`. It is not a generic command adapter. The original installer derives GET runner metadata and POST registration-token endpoints from the exact HTTPS github.com repository/organization scope, fixes the host/method/endpoint arguments itself, and keeps the returned token in the registration call only. Metadata is bounded at100 runners/1MiB/10seconds; incomplete or unavailable observations remain unknown. A present local registration must match the declared scope/name before any registration effect.
+
+An explicitly declared `tarball` is a destination even before its first download. Its parent is created at that path; the SHA256 check still precedes extraction. The composing host record supplies owner data/state or data/logs custody and independently admits physical capacity before materialization. Omitted tarball retains the original legacy fallback; new host composition requires explicit owner custody.
 
 `ci-runner-host-parameters@1`:
 

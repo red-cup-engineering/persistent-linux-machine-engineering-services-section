@@ -50,6 +50,12 @@ Each requirement has one shall. Identifiers are stable.
 
 ## Receiving conditions
 
+- CR-13. A declared download path shall remain the download destination when it does not yet exist, so caches stay in the host owner's declared data custody.
+- CR-14. A structured GitHub registration supplier shall execute only the exact scope's native runner metadata and just-in-time registration-token endpoints through its declared absolute GitHub CLI executable.
+- CR-15. The service shall receive actual GitHub runner id, name, scope, online state and declared labels rather than treat local registration bytes or a workflow selector as capacity.
+- CR-16. Structured registration shall pass no credential through a shell, record, diagnostic or job environment.
+- CR-17. A live local registration for a different scope or name shall refuse reconfiguration until its original custody is reconciled.
+
 1. On Bare Cedar Fog the existing registration is adopted with no new token, and jobs keep running.
 2. After a job, the work folder holds only the retained caches.
 3. `plan` exits 0 on the converged host, and `apply` run twice changes nothing.
