@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {registrationInvocation,readRunnerRegistration,tarballPath,configureRunner,apply} from '../src/ci-runner-host.mjs';
+import {registrationInvocation,readRunnerRegistration,tarballPath,configureRunner,preflightRunnerRegistration,registerRunner,apply} from '../src/ci-runner-host.mjs';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
 const runner={name:'held-runner',scope:'https://github.com/group/private-source',labels:['bare-cedar-fog'],registration:{executable:'/usr/bin/gh'},version:'2.338.0',tarball:'/owner/data/logs/runner.tgz'};
 test('original supplier constructs exact private repository registration without a shell',()=>{
@@ -18,7 +18,7 @@ test('a nonexistent declared archive stays in original owner custody',()=>{
 test('a native config failure cannot expose or retain token-bearing command diagnostics',()=>{
  const token='fixture-registration-token';
  assert.throws(()=>configureRunner({...runner,root:'/owner/data/state/runner'},token,{run:(_command,args,options)=>{
-  assert.ok(args.includes(token));assert.equal(options.stdio,'ignore');throw Error('native failed with '+token);
+  assert.ok(args.includes(token));assert.ok(!args.includes('--replace'));assert.equal(options.stdio,'ignore');throw Error('native failed with '+token);
  }}),error=>!error.message.includes(token)&&!error.cause&&/withheld/.test(error.message));
 });
 test('foreign local registration refuses before downloading, linking or unit effects',async()=>{
@@ -30,6 +30,40 @@ test('foreign local registration refuses before downloading, linking or unit eff
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 const native={id:42,name:runner.name,status:'online',busy:false,labels:[{name:'self-hosted'},{name:'Linux'},{name:'X64'},{name:'bare-cedar-fog'}]};
+test('unavailable, ambiguous and existing remote names refuse before new download or registration',async()=>{
+ for(const response of [null,{total_count:2,runners:[native]}, {total_count:1,runners:[native]}]){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-admission-'));let calls=0;
+  try{
+   await assert.rejects(()=>apply({runners:[{...runner,root}]},{registrationRun:(_exe,args)=>{
+    calls++;assert.ok(args.includes('GET'));assert.ok(!args.includes('POST'));
+    if(response===null)throw Object.assign(Error('private diagnostic'),{stdout:'fixture-token'});
+    return JSON.stringify(response);
+   }}),/explicit same-scope remote absence/);
+   assert.equal(calls,1);assert.deepEqual(fs.readdirSync(root),[]);
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+});
+test('retained local id must match the actual native remote id before any materialization',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-retained-'));
+ try{
+  fs.mkdirSync(path.join(root,'runner'));const file=path.join(root,'runner/.runner');
+  fs.writeFileSync(file,JSON.stringify({agentName:runner.name,gitHubUrl:runner.scope,agentId:41}));
+  const read=()=>JSON.stringify({total_count:1,runners:[native]});
+  assert.throws(()=>preflightRunnerRegistration({...runner,root},{run:read}),/identity is unreceived/);
+  fs.writeFileSync(file,JSON.stringify({agentName:runner.name,gitHubUrl:runner.scope,agentId:42}));
+  assert.equal(preflightRunnerRegistration({...runner,root},{run:read}).local.id,42);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('token supplier errors discard native stdout, stderr and command custody',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-token-'));let called=0;
+ try{
+  assert.throws(()=>registerRunner({...runner,root},[],{run:(_exe,args)=>{
+   called++;if(args.includes('GET'))return JSON.stringify({total_count:0,runners:[]});
+   throw Object.assign(Error('fixture-secret-token'),{stdout:'fixture-secret-token',stderr:'fixture-secret-token'});
+  }}),error=>error.code==='runner-registration-token-unavailable'&&!JSON.stringify(error).includes('fixture-secret-token')&&!error.message.includes('fixture-secret-token')&&!error.cause&&!error.stdout&&!error.stderr);
+  assert.equal(called,2);assert.deepEqual(fs.readdirSync(root),[]);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
 test('actual API id, online state and labels receive the resource',()=>{
  const found=readRunnerRegistration(runner,{run:(exe,args,options)=>{
   assert.equal(exe,'/usr/bin/gh');assert.ok(args.includes('/repos/group/private-source/actions/runners?per_page=100'));

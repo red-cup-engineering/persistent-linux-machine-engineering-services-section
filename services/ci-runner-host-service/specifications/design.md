@@ -34,6 +34,7 @@ Under `root`:
 - **Node built-ins only.** The service runs where Node 22+ is available. The tarball is fetched with `fetch` and unpacked with the system `tar`.
 
 ## Parameter record
+Structured apply preflights complete same-scope native metadata before any download/link effect, and again immediately before a registration token. A missing local registration needs explicit remote absence; a retained local registration needs the exact native remote agent id. Unknown/ambiguous/incomplete state and a remote occupied name refuse. Native configuration never receives --replace, so a concurrent remote claim cannot be overwritten. Token-supplier failures retain only a fixed public class; original Error/stdout/stderr/cause and token-bearing argv never enter diagnostics.
 
 The optional structured registration supplier is `registration: {executable: <absolute gh path>}`. It is not a generic command adapter. The original installer derives GET runner metadata and POST registration-token endpoints from the exact HTTPS github.com repository/organization scope, fixes the host/method/endpoint arguments itself, and keeps the returned token in the registration call only. Metadata is bounded at100 runners/1MiB/10seconds; incomplete or unavailable observations remain unknown. A present local registration must match the declared scope/name before any registration effect.
 

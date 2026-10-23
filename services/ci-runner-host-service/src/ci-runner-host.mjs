@@ -67,7 +67,7 @@ export function configureRunner(r,token,{run=execFileSync}={}){
   if(typeof token!=='string'||!token||/[\r\n\0]/.test(token))throw new Error('registration supplier returned no single-use token');
   const p=paths(r);
   try{run(join(p.runner,'config.sh'),['--unattended','--url',r.scope,'--token',token,'--name',r.name,
-    '--labels',(r.labels??[]).join(','),'--work','_work','--replace','--disableupdate'],{cwd:p.runner,stdio:'ignore'});}
+    '--labels',(r.labels??[]).join(','),'--work','_work','--disableupdate'],{cwd:p.runner,stdio:'ignore'});}
   catch{throw new Error('native runner registration failed; token and native diagnostics withheld');}
 }
 
@@ -284,17 +284,38 @@ function assertRegistrationIdentity(r) {
   if(!existsSync(file))return false;
   const registered=JSON.parse(readFileSync(file,'utf8').replace(/^﻿/,''));
   if(registered.agentName!==r.name||registered.gitHubUrl!==r.scope)throw new Error('existing runner registration identity differs; reconcile original custody');
-  return true;
+  return registered;
 }
 
-function register(r, log) {
+/** Absence and retained native identity are the only registration admissions. */
+export function preflightRunnerRegistration(r,{run=execFileSync}={}){
+  const local=assertRegistrationIdentity(r);
+  const remote=readRunnerRegistration(r,{run});
+  if(!local){
+    if(remote.state!=='absent')throw new Error('new runner requires explicit same-scope remote absence');
+  }else if(!['current','drift'].includes(remote.state)||!Number.isSafeInteger(local.agentId)||local.agentId!==remote.id){
+    throw new Error('retained local and remote runner identity is unreceived');
+  }
+  return {local:local?{id:local.agentId,name:local.agentName,scope:local.gitHubUrl}:null,remote};
+}
+
+function acquireRegistrationToken(r,invocation,run){
+  try{
+    const raw=invocation?run(invocation.executable,invocation.args,{encoding:'utf8',timeout:10000,maxBuffer:65536,stdio:['ignore','pipe','ignore']})
+      :run('bash',['-c',r.credentialCommand],{encoding:'utf8',stdio:['ignore','pipe','ignore']});
+    const token=String(raw).trim();
+    if(!token||/[\r\n\0]/.test(token))throw new Error('invalid token supplier result');
+    return token;
+  }catch{throw Object.assign(new Error('runner registration token supplier failed; native diagnostics withheld'),{code:'runner-registration-token-unavailable'});}
+}
+
+export function registerRunner(r, log, {run=execFileSync}={}) {
   const p = paths(r);
+  if(r.registration)preflightRunnerRegistration(r,{run});
   if (assertRegistrationIdentity(r)) return;
   if (!r.credentialCommand&&!r.registration) throw new Error(`[${r.name}] nothing to adopt and no registration supplier`);
   const invocation=r.registration?registrationInvocation(r,'POST'):null;
-  const token = (invocation?execFileSync(invocation.executable,invocation.args,{encoding:'utf8',timeout:10000,maxBuffer:65536,stdio:['ignore','pipe','ignore']})
-    :execFileSync('bash', ['-c', r.credentialCommand], { encoding: 'utf8' })).trim();
-  if(!token||/[\r\n\0]/.test(token))throw new Error('registration supplier returned no single-use token');
+  const token = acquireRegistrationToken(r,invocation,run);
   configureRunner(r,token);
   log.push(`registered ${r.name} with ${r.scope}`);
 }
@@ -324,17 +345,18 @@ function link(r, log) {
   for (const s of SCRIPTS) if (existsSync(join(p.version, s)) && !existsSync(join(p.runner, s))) copyFileSync(join(p.version, s), join(p.runner, s));
 }
 
-export async function apply(record, { now = false } = {}) {
+export async function apply(record, { now = false, registrationRun=execFileSync } = {}) {
   const log = [];
   for (const r of record.runners) {
     if(r.registration)registrationInvocation(r,'POST');
     assertRegistrationIdentity(r);
+    if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
     const p = paths(r);
     const adopted = adopt(r, log, now);
     if (adopted === null) continue;
     await ensureVersion(r, log);
     link(r, log);
-    register(r, log);
+    registerRunner(r, log,{run:registrationRun});
     writeIfChanged(p.hook, renderHook(r), log, 0o755);
     const envPath = join(p.runner, '.env');
     writeIfChanged(envPath, mergeEnv(text(envPath), HOOK_KEY, p.hook), log);
