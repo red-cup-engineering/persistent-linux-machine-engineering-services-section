@@ -1,7 +1,7 @@
 // Controls-only receiving for the original CI owner's retained flat installations.
 // This never installs, registers, moves, cleans, starts, stops or thaws a runner.
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, writeFileSync, unlinkSync, chmodSync, linkSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, writeFileSync, unlinkSync, chmodSync, linkSync, readFileSync, readdirSync, readlinkSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { canonicalPath, inspectOwnedFile, readOwnedFile, admissionDeclaration } from './host-admission.mjs';
@@ -79,9 +79,33 @@ function dropinText(controls, hook) {
     `Environment=${unitQuote('ACTIONS_RUNNER_HOOK_JOB_STARTED='+hook)}`, ''].join('\n');
 }
 const sameReceipt = receipt => {
+  if(receipt.kind==='original-unit-link'){
+    ownedDirectory(dirname(receipt.path),receipt.ownerUid);
+    const link=lstatSync(receipt.path);
+    assert.ok(link.isSymbolicLink(),'original registered unit link replaced');
+    assert.equal(String(link.dev),receipt.device,'original unit link device changed');
+    assert.equal(String(link.ino),receipt.inode,'original unit link inode changed');assert.equal(link.uid,receipt.uid,'original unit link owner changed');
+    assert.equal(readlinkSync(receipt.path),receipt.target,'original unit link target changed');assert.equal(realpathSync(receipt.path),receipt.target,'original unit target changed');return;
+  }
   const next=readOwnedFile(receipt.path,{sha256:receipt.sha256});
   assert.equal(next.dev,receipt.dev,'controls input device changed');assert.equal(next.ino,receipt.ino,'controls input inode changed');
 };
+function receiveOriginalUnitFragment(record,runner,path){
+  const link=lstatSync(path),declared=runner.existing.unitFragmentLink;
+  if(!link.isSymbolicLink()){
+    assert.equal(declared,undefined,'declared original unit link was replaced');
+    return [readOwnedFile(path,{sha256:runner.existing.unitFragmentSha256})];
+  }
+  assert.ok(declared&&typeof declared==='object','explicit original registered unit link required');
+  const target=join(dirname(runner.root),'units',unitName(runner));
+  assert.equal(declared.target,target,'original flat unit source custody differs');canonicalPath(target);
+  ownedDirectory(dirname(path),record.controls.uid);
+  assert.ok(link.uid===record.controls.uid||link.uid===0,'foreign registered unit link owner');
+  assert.ok(Number.isSafeInteger(link.dev)&&Number.isSafeInteger(link.ino),'exact native unit link identity required');
+  const receipt={kind:'original-unit-link',path,ownerUid:record.controls.uid,device:declared.device,inode:declared.inode,uid:declared.uid,target};
+  sameReceipt(receipt);
+  return [receipt,readOwnedFile(target,{sha256:runner.existing.unitFragmentSha256})];
+}
 function nativeCgroup(group){
   assert.ok(/^\/[A-Za-z0-9_./@:-]+$/.test(group)&&!group.includes('..'),'invalid original cgroup');
   const root='/sys/fs/cgroup'+group;
@@ -146,10 +170,11 @@ export async function planExistingControls(record, { registration, unit = readNa
     // quarantine below preserves an exact frozen raced-in job rather than killing it.
     const unitPath=join(c.home,'.config/systemd/user',unitName(r));
     assert.equal(r.existing.unitFragment,unitPath,'original user-unit fragment required');
-    const fragment=readOwnedFile(unitPath,{sha256:r.existing.unitFragmentSha256});
+    const fragments=receiveOriginalUnitFragment(record,r,unitPath);
     const hook=join(c.directory,r.name+'-admit.sh'), dropin=join(unitPath+'.d','80-ci-runner-host-admission.conf');
     const native=unit(unitName(r),{expectedJobHook:hook});
-    assert.equal(native.Id,unitName(r));assert.equal(native.LoadState,'loaded');assert.equal(native.FragmentPath,unitPath,'native fragment differs');
+    assert.equal(native.Id,unitName(r));assert.equal(native.LoadState,'loaded');
+    assert.ok(native.FragmentPath===unitPath||(r.existing.unitFragmentLink&&native.FragmentPath===r.existing.unitFragmentLink.target),'native fragment differs');
     assert.equal(native.WorkingDirectory,r.root,'native working directory differs');
     const exec=/^\{ path=([^;]+) ; argv\[\]=([^;]+) ;/.exec(native.ExecStart??'');
     assert.ok(exec && !native.ExecStart.slice(1).includes('{'),'one original native runner command required');
@@ -168,7 +193,7 @@ export async function planExistingControls(record, { registration, unit = readNa
     const pause=await receivePause(record,r,ports);
     const loaded=(native.DropInPaths??'').split(' ').includes(dropin)
       &&(native.ExecCondition??'').includes('path='+hook+' ; argv[]='+hook+' startup ;')&&native.jobStartedHook===hook;
-    receipts.push(local,fragment,...(dotEnv?[dotEnv]:[]),...pause.receipts);units.push({name:unitName(r),hook,dropin,native,pause:pause.value,loaded});
+    receipts.push(local,...fragments,...(dotEnv?[dotEnv]:[]),...pause.receipts);units.push({name:unitName(r),hook,dropin,native,pause:pause.value,loaded});
   }
   return {type:'CiRunnerExistingControlsPlan',changed:files.some(f=>!f.current)||units.some(u=>!u.loaded),files,units,receipts};
 }
@@ -200,6 +225,7 @@ export async function applyExistingControls(record, ports={}){
     }finally{if(owned){const current=lstatSync(temp);assert.ok(current.dev===owned.dev&&current.ino===owned.ino,'controls staging identity unknown; custody retained');unlinkSync(temp);}}
   }
   (ports.reload ?? (()=>execFileSync('/usr/bin/systemctl',['--user','daemon-reload'],{stdio:'ignore',timeout:10000})))();
+  again.receipts.forEach(sameReceipt);
   const loaded=await planExistingControls(record,ports);
   assert.deepEqual(loaded.units.map(u=>u.pause),again.units.map(u=>u.pause),'original retained pause changed after reload');
   assert.equal(loaded.changed,false,'installed controls not received');
