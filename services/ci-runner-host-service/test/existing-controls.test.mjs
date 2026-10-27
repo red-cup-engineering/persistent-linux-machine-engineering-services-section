@@ -20,7 +20,7 @@ async function fixture(){
  const files=['scripts/ci-runner-host.mjs','src/ci-runner-host.mjs','src/host-admission.mjs','src/existing-controls.mjs','src/runner-layout.mjs'].map(p=>({path:path.join(source,p),sha256:sha(fs.readFileSync(path.join(source,p)))}));
  const record={...f.record,controls:{mode:'existing-flat',uid:process.getuid(),home,directory:path.join(f.root,'controls'),parametersPath:path.join(f.root,'ci.json'),runtime:{node:process.execPath,cli:path.join(source,'scripts/ci-runner-host.mjs'),files}},runners:[{name,root,scope:'https://github.com/group/repo',labels:['fixture'],registration:{executable:'/usr/bin/gh'},existing:{id:42,unitFragment:fragment,unitFragmentSha256:sha(fs.readFileSync(fragment))}}]};
  let reloads=0,gets=0;const dropin=fragment+'.d/80-ci-runner-host-admission.conf',hook=path.join(record.controls.directory,name+'-admit.sh');
- const native=()=>({Id:unit,LoadState:'loaded',FragmentPath:fragment,WorkingDirectory:root,ExecStart:`{ path=${root}/run.sh ; argv[]=${root}/run.sh ; ignore_errors=no ; start_time=[n/a] ; pid=0 }`,DropInPaths:reloads?dropin:'',ExecCondition:reloads?`{ path=${hook} ; argv[]=${hook} startup ; ignore_errors=no }`:''});
+ const native=()=>({Id:unit,LoadState:'loaded',FragmentPath:fragment,WorkingDirectory:root,ExecStart:`{ path=${root}/run.sh ; argv[]=${root}/run.sh ; ignore_errors=no ; start_time=[n/a] ; pid=0 }`,DropInPaths:reloads?dropin:'',ExecCondition:reloads?`{ path=${hook} ; argv[]=${hook} startup ; ignore_errors=no }`:'',jobStartedHook:reloads?hook:null});
  const registrationRun=(_exe,args)=>{gets++;assert.ok(args.includes('GET'));assert.ok(!args.includes('POST'));return JSON.stringify({total_count:1,runners:[{id:42,name,status:'online',busy:false,labels:[{name:'fixture'}]}]});};
  const controlsPorts={unit:native,reload:()=>{reloads++;}};
  const originalPause=process.env.WSL_QUARANTINE_SOURCE??fileURLToPath(new URL('../../wsl-host-service/src/user-unit-quarantine.mjs',import.meta.url));
@@ -99,4 +99,20 @@ test('a raced replacement after reload refuses protection claim and preserves or
  f.controlsPorts.reload=()=>{old();f.pauseState.InvocationID='b'.repeat(32);};
  await assert.rejects(apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),/invocation/);
  assert.equal(sha(fs.readFileSync(f.q.marker)),marker);assert.equal(sha(fs.readFileSync(f.q.guard)),guard);assert.equal(f.kernel.freeze,'1');assert.ok(fs.existsSync(f.hook));
+}));
+test('missing native load after interrupted apply remains drift and original reentry performs reload only',run(async f=>{
+ const reload=f.controlsPorts.reload;f.controlsPorts.reload=()=>{throw Error('fixture interruption before native reload');};
+ await assert.rejects(apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),/interruption/);
+ const before=[f.hook,f.dropin].map(p=>({path:p,ino:fs.statSync(p).ino,hash:sha(fs.readFileSync(p))}));
+ assert.equal((await observe(f.record,{registrationRun:f.registrationRun,...f.controlsPorts}))[0].status,'drift');
+ f.controlsPorts.reload=reload;const log=await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts});assert.equal(log.length,1);assert.match(log[0],/reloaded/);assert.equal(f.reloads,1);
+ for(const item of before){assert.equal(fs.statSync(item.path).ino,item.ino);assert.equal(sha(fs.readFileSync(item.path)),item.hash);}
+ assert.equal((await observe(f.record,{registrationRun:f.registrationRun,...f.controlsPorts}))[0].status,'current');
+ assert.deepEqual(await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),[]);assert.equal(f.reloads,1);
+}));
+test('missing or unexpected configured job hook cannot be reported current from file bytes alone',run(async f=>{
+ await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts});const unit=f.controlsPorts.unit;
+ f.controlsPorts.unit=(...args)=>({...unit(...args),jobStartedHook:null});
+ assert.equal((await observe(f.record,{registrationRun:f.registrationRun,...f.controlsPorts}))[0].status,'drift');
+ await assert.rejects(apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),/installed controls not received/);
 }));

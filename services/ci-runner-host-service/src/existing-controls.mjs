@@ -13,12 +13,28 @@ const shell = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 const unitQuote = value => '"' + String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('$', '$$') + '"';
 const optional = path => { try { return readOwnedFile(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
 
-export function readNativeRunnerUnit(unit) {
+export function readNativeRunnerUnit(unit,{expectedJobHook}={}) {
   safeName(unit);
   const out = execFileSync('/usr/bin/systemctl', ['--user', 'show', unit, '--no-pager',
     '--property=Id,LoadState,FragmentPath,WorkingDirectory,ExecStart,DropInPaths,ExecCondition'],
   { encoding: 'utf8', timeout: 10000, maxBuffer: 65536, stdio: ['ignore','pipe','ignore'] });
-  return Object.fromEntries(out.trimEnd().split('\n').map(line => { const n = line.indexOf('='); return [line.slice(0,n), line.slice(n+1)]; }));
+  const result=Object.fromEntries(out.trimEnd().split('\n').map(line => { const n = line.indexOf('='); return [line.slice(0,n), line.slice(n+1)]; }));
+  const bus=args=>{try{return JSON.parse(execFileSync('/usr/bin/busctl',['--user','--json=short',...args],{encoding:'utf8',timeout:10000,maxBuffer:65536,stdio:['ignore','pipe','ignore']}));}catch{throw Error('native selected unit service metadata unavailable; native output withheld');}};
+  // LoadUnit reads the same declared unit metadata as systemctl show. GetUnit
+  // races inactive-unit garbage collection between independent native clients.
+  const object=bus(['call','org.freedesktop.systemd1','/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','LoadUnit','s',unit]);
+  assert.ok(object.type==='o'&&Array.isArray(object.data)&&object.data.length===1&&typeof object.data[0]==='string','native unit object identity required');
+  const environment=bus(['get-property','org.freedesktop.systemd1',object.data[0],'org.freedesktop.systemd1.Service','Environment']);
+  assert.ok(environment.type==='as'&&Array.isArray(environment.data)&&environment.data.every(item=>typeof item==='string'),'native service environment schema required');
+  const files=bus(['get-property','org.freedesktop.systemd1',object.data[0],'org.freedesktop.systemd1.Service','EnvironmentFiles']);
+  const unset=bus(['get-property','org.freedesktop.systemd1',object.data[0],'org.freedesktop.systemd1.Service','UnsetEnvironment']);
+  assert.ok(files.type==='a(sb)'&&Array.isArray(files.data)&&unset.type==='as'&&Array.isArray(unset.data)&&unset.data.every(item=>typeof item==='string'),'native environment override schema required');
+  const selected=environment.data.filter(item=>item.startsWith('ACTIONS_RUNNER_HOOK_JOB_STARTED='));
+  // Return only the one known safe expected path. Other environment data and
+  // unexpected values never leave this native receiver or enter diagnostics.
+  const overrides=files.data.length>0||unset.data.some(item=>item==='ACTIONS_RUNNER_HOOK_JOB_STARTED'||item.startsWith('ACTIONS_RUNNER_HOOK_JOB_STARTED='));
+  result.jobStartedHook=!overrides&&typeof expectedJobHook==='string'&&selected.length===1&&selected[0]==='ACTIONS_RUNNER_HOOK_JOB_STARTED='+expectedJobHook?expectedJobHook:null;
+  return result;
 }
 function ownedDirectory(path, uid, { privateMode = false } = {}) {
   canonicalPath(path);
@@ -131,7 +147,8 @@ export async function planExistingControls(record, { registration, unit = readNa
     const unitPath=join(c.home,'.config/systemd/user',unitName(r));
     assert.equal(r.existing.unitFragment,unitPath,'original user-unit fragment required');
     const fragment=readOwnedFile(unitPath,{sha256:r.existing.unitFragmentSha256});
-    const native=unit(unitName(r));
+    const hook=join(c.directory,r.name+'-admit.sh'), dropin=join(unitPath+'.d','80-ci-runner-host-admission.conf');
+    const native=unit(unitName(r),{expectedJobHook:hook});
     assert.equal(native.Id,unitName(r));assert.equal(native.LoadState,'loaded');assert.equal(native.FragmentPath,unitPath,'native fragment differs');
     assert.equal(native.WorkingDirectory,r.root,'native working directory differs');
     const exec=/^\{ path=([^;]+) ; argv\[\]=([^;]+) ;/.exec(native.ExecStart??'');
@@ -139,8 +156,7 @@ export async function planExistingControls(record, { registration, unit = readNa
     assert.equal(exec[1],join(r.root,'run.sh'),'native runner executable differs');
     assert.equal(exec[2],join(r.root,'run.sh'),'native runner arguments differ');
     const dotEnv=optional(join(r.root,'.env'));
-    assert.ok(!dotEnv || !/^ACTIONS_RUNNER_HOOK_JOB_STARTED=/m.test(dotEnv.bytes.toString()),'runner .env competes with original job admission control');
-    const hook=join(c.directory,r.name+'-admit.sh'), dropin=join(unitPath+'.d','80-ci-runner-host-admission.conf');
+    assert.ok(!dotEnv || !/^[\s\uFEFF]*ACTIONS_RUNNER_HOOK_JOB_STARTED\s*=/m.test(dotEnv.bytes.toString()),'runner .env competes with original job admission control');
     newDirectory(dirname(dropin),c.uid);
     for(const [path,content,mode] of [[hook,hookText(c,r),0o700],[dropin,dropinText(c,hook),0o600]]){
       assert.ok(!optional(path+'.pending'),'interrupted controls staging custody requires receiving before successor writes');
@@ -150,9 +166,11 @@ export async function planExistingControls(record, { registration, unit = readNa
       files.push({path,content,mode,current:!!current});
     }
     const pause=await receivePause(record,r,ports);
-    receipts.push(local,fragment,...(dotEnv?[dotEnv]:[]),...pause.receipts);units.push({name:unitName(r),hook,dropin,native,pause:pause.value});
+    const loaded=(native.DropInPaths??'').split(' ').includes(dropin)
+      &&(native.ExecCondition??'').includes('path='+hook+' ; argv[]='+hook+' startup ;')&&native.jobStartedHook===hook;
+    receipts.push(local,fragment,...(dotEnv?[dotEnv]:[]),...pause.receipts);units.push({name:unitName(r),hook,dropin,native,pause:pause.value,loaded});
   }
-  return {type:'CiRunnerExistingControlsPlan',changed:files.some(f=>!f.current),files,units,receipts};
+  return {type:'CiRunnerExistingControlsPlan',changed:files.some(f=>!f.current)||units.some(u=>!u.loaded),files,units,receipts};
 }
 
 /** Apply only declared tiny refusal controls; no service state transition is a supported effect. */
@@ -165,7 +183,8 @@ export async function applyExistingControls(record, ports={}){
   assert.deepEqual(again.units.map(u=>u.pause),plan.units.map(u=>u.pause),'original retained pause changed before controls');
   if(!existsSync(c.directory))mkdirSync(c.directory,{mode:0o700});
   ownedDirectory(c.directory,c.uid,{privateMode:true});
-  const writes=[];
+  const writes=[],writeReceipts=[];
+  try{
   for(const f of again.files){
     if(f.current)continue;
     if(!existsSync(dirname(f.path)))mkdirSync(dirname(f.path),{mode:0o700});
@@ -176,6 +195,8 @@ export async function applyExistingControls(record, ports={}){
       // link-like exclusive receive avoids replacing a raced target; no unrelated file is removed.
       linkSync(temp,f.path);
       writes.push(f.path);
+      const received=readOwnedFile(f.path);assert.ok(received.dev===owned.dev&&received.ino===owned.ino,'created control inode changed');
+      writeReceipts.push({path:f.path,dev:owned.dev,ino:owned.ino,sha256:received.sha256,mode:received.mode,uid:received.uid});
     }finally{if(owned){const current=lstatSync(temp);assert.ok(current.dev===owned.dev&&current.ino===owned.ino,'controls staging identity unknown; custody retained');unlinkSync(temp);}}
   }
   (ports.reload ?? (()=>execFileSync('/usr/bin/systemctl',['--user','daemon-reload'],{stdio:'ignore',timeout:10000})))();
@@ -185,7 +206,9 @@ export async function applyExistingControls(record, ports={}){
   for(const u of loaded.units){
     assert.ok((u.native.DropInPaths??'').split(' ').includes(u.dropin),'native manager did not load admission drop-in');
     assert.ok((u.native.ExecCondition??'').includes('path='+u.hook+' ;'),'native manager did not load startup admission condition');
+    assert.equal(u.native.jobStartedHook,u.hook,'native manager did not configure the selected job-start admission hook');
   }
-  return {changed:true,writes,reloaded:true,residentEnvironment:'unchanged; job hook applies to future native starts only'};
+  return {changed:true,writes,writeReceipts,reloaded:true,residentEnvironment:'unchanged; job hook applies to future native starts only'};
+  }catch(error){if(error&&typeof error==='object'&&Object.isExtensible(error))error.controlWrites=writeReceipts;throw error;}
 }
 
