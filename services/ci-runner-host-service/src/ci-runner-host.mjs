@@ -5,9 +5,12 @@ import {
   rmSync, chmodSync, copyFileSync,
 } from 'node:fs';
 import { join, dirname, isAbsolute } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { prepareHostAdmission, assertOperationAdmission, closeHostAdmission } from './host-admission.mjs';
+import { planExistingControls, applyExistingControls } from './existing-controls.mjs';
+export { observeHostAdmission, prepareHostAdmission, closeHostAdmission } from './host-admission.mjs';
 
 export const SCHEMA = 'ci-runner-host-parameters@1';
 const HOOK_KEY = 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED';
@@ -23,11 +26,8 @@ export function bytes(size) {
   return Math.round(Number(m[1]) * UNITS[m[2]]);
 }
 
-export const unitName = (r) => `ci-runner-${r.name}.service`;
-export const paths = (r) => ({
-  runner: join(r.root, 'runner'), version: join(r.root, 'versions', r.version),
-  hook: join(r.root, 'hooks', 'job-completed.sh'), work: join(r.root, 'runner', '_work'), diag: join(r.root, 'runner', '_diag'),
-});
+import {unitName,paths,tarballPath} from './runner-layout.mjs';
+export {unitName,paths,tarballPath} from './runner-layout.mjs';
 
 /** The original GitHub supplier has fixed scope-bound methods, never a shell. */
 export function registrationInvocation(r, method = 'GET') {
@@ -56,15 +56,14 @@ export function readRunnerRegistration(r,{run=execFileSync}={}){
     if(found.length!==1||!Number.isSafeInteger(runner.id)||runner.id<1||!Array.isArray(labels)||labels.some(label=>typeof label!=='string'))
       return {state:'unknown',reason:'ambiguous-runner-metadata'};
     return {state:runner.status==='online'&&(r.labels??[]).every(label=>labels.includes(label))?'current':'drift',
-      id:runner.id,name:runner.name,scope:r.scope,status:runner.status,busy:runner.busy===true,labels};
+      id:runner.id,name:runner.name,scope:r.scope,status:runner.status,busy:typeof runner.busy==='boolean'?runner.busy:null,labels};
   }catch{return {state:'unknown',reason:'runner-metadata-unavailable'};}
 }
 
-export const tarballPath = r => r.tarball ?? join(tmpdir(),`actions-runner-linux-x64-${r.version}.tar.gz`);
-
 /** Native config failures must never retain their token-bearing argv in an Error. */
-export function configureRunner(r,token,{run=execFileSync}={}){
+export function configureRunner(r,token,{run=execFileSync,admission}={}){
   if(typeof token!=='string'||!token||/[\r\n\0]/.test(token))throw new Error('registration supplier returned no single-use token');
+  assertOperationAdmission(admission,r);
   const p=paths(r);
   try{run(join(p.runner,'config.sh'),['--unattended','--url',r.scope,'--token',token,'--name',r.name,
     '--labels',(r.labels??[]).join(','),'--work','_work','--disableupdate'],{cwd:p.runner,stdio:'ignore'});}
@@ -176,7 +175,8 @@ function workEntries(work) {
 }
 const workerRunning = () => shOk('pgrep', ['-f', 'Runner.Worker']) !== '';
 
-export function observe(record) {
+export function observe(record, options={}) {
+  if(record.controls?.mode==='existing-flat')return observeExistingControls(record,options);
   const items = [];
   const add = (id, ok, detail) => items.push({ id, status: ok ? 'current' : 'drift', detail });
   for (const r of record.runners) {
@@ -237,12 +237,14 @@ function listenerVersion(binDir) {
   return shOk(join(binDir, 'Runner.Listener'), ['--version']);
 }
 
-async function ensureVersion(r, log) {
+async function ensureVersion(r, log, admission) {
+  assertOperationAdmission(admission,r);
   const p = paths(r);
   if (existsSync(join(p.version, 'bin', 'Runner.Listener'))) return;
   // Adoption: an adopted runner's own binaries of the pinned version become the version directory.
   const bin = join(p.runner, 'bin');
   if (lst(bin)?.isDirectory() && !lst(bin).isSymbolicLink() && listenerVersion(bin) === r.version) {
+    assertOperationAdmission(admission,r);
     mkdirSync(p.version, { recursive: true });
     renameSync(bin, join(p.version, 'bin'));
     renameSync(join(p.runner, 'externals'), join(p.version, 'externals'));
@@ -256,10 +258,13 @@ async function ensureVersion(r, log) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`download ${url}: HTTP ${res.status}`);
     mkdirSync(dirname(tarball),{recursive:true});
-    writeFileSync(tarball, Buffer.from(await res.arrayBuffer()));
+    const archive=Buffer.from(await res.arrayBuffer());
+    assertOperationAdmission(admission,r);
+    writeFileSync(tarball, archive);
   }
   const sum = createHash('sha256').update(readFileSync(tarball)).digest('hex');
   if (sum !== r.sha256) throw new Error(`${tarball}: sha256 ${sum} is not the record's ${r.sha256}`);
+  assertOperationAdmission(admission,r);
   mkdirSync(p.version, { recursive: true });
   execFileSync('tar', ['-xzf', tarball, '-C', p.version]);
   log.push(`installed runner ${r.version} into ${p.version} (sha256 verified)`);
@@ -309,14 +314,15 @@ function acquireRegistrationToken(r,invocation,run){
   }catch{throw Object.assign(new Error('runner registration token supplier failed; native diagnostics withheld'),{code:'runner-registration-token-unavailable'});}
 }
 
-export function registerRunner(r, log, {run=execFileSync}={}) {
+export function registerRunner(r, log, {run=execFileSync,admission}={}) {
   const p = paths(r);
   if(r.registration)preflightRunnerRegistration(r,{run});
   if (assertRegistrationIdentity(r)) return;
   if (!r.credentialCommand&&!r.registration) throw new Error(`[${r.name}] nothing to adopt and no registration supplier`);
+  assertOperationAdmission(admission,r);
   const invocation=r.registration?registrationInvocation(r,'POST'):null;
   const token = acquireRegistrationToken(r,invocation,run);
-  configureRunner(r,token);
+  configureRunner(r,token,{admission});
   log.push(`registered ${r.name} with ${r.scope}`);
 }
 
@@ -345,18 +351,32 @@ function link(r, log) {
   for (const s of SCRIPTS) if (existsSync(join(p.version, s)) && !existsSync(join(p.runner, s))) copyFileSync(join(p.version, s), join(p.runner, s));
 }
 
-export async function apply(record, { now = false, registrationRun=execFileSync } = {}) {
+export async function apply(record, { now = false, registrationRun=execFileSync, controlsPorts } = {}) {
+  if (record.controls?.mode === 'existing-flat') {
+    const result=await applyExistingControls(record,{...controlsPorts,registration:r=>readRunnerRegistration(r,{run:registrationRun})});
+    return result.writes.map(path=>`wrote ${path}`).concat(result.reloaded?['reloaded original user-unit controls; resident runners unchanged']:[]);
+  }
+  // Receive all pure/local/native registration identities before any growth or unit effect.
+  for (const r of record.runners) {
+    if(r.registration)registrationInvocation(r,'POST');
+    assertRegistrationIdentity(r);
+    if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
+  }
+  const admission=await prepareHostAdmission(record,record.runners);
+  try {
   const log = [];
   for (const r of record.runners) {
     if(r.registration)registrationInvocation(r,'POST');
     assertRegistrationIdentity(r);
     if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
     const p = paths(r);
+    assertOperationAdmission(admission,r);
     const adopted = adopt(r, log, now);
     if (adopted === null) continue;
-    await ensureVersion(r, log);
+    await ensureVersion(r, log, admission);
+    assertOperationAdmission(admission,r);
     link(r, log);
-    registerRunner(r, log,{run:registrationRun});
+    registerRunner(r, log,{run:registrationRun,admission});
     writeIfChanged(p.hook, renderHook(r), log, 0o755);
     const envPath = join(p.runner, '.env');
     writeIfChanged(envPath, mergeEnv(text(envPath), HOOK_KEY, p.hook), log);
@@ -370,4 +390,10 @@ export async function apply(record, { now = false, registrationRun=execFileSync 
     if (!workerRunning()) { execFileSync('bash', [p.hook]); log.push('ran the job-completed hook once (idle)'); }
   }
   return log;
+  } finally { closeHostAdmission(admission); }
+}
+
+export async function observeExistingControls(record,{registrationRun=execFileSync,...ports}={}){
+  const plan=await planExistingControls(record,{...ports,registration:r=>readRunnerRegistration(r,{run:registrationRun})});
+  return plan.units.map(unit=>({id:unit.name,status:plan.files.filter(file=>[unit.hook,unit.dropin].includes(file.path)).every(file=>file.current)?'current':'drift',detail:'original flat registration bound; startup/job refusal controls; resident environment unchanged'}));
 }
