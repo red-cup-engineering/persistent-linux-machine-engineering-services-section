@@ -15,7 +15,7 @@ assert.ok(output&&path.isAbsolute(output),'explicit qualification receipt requir
 const fixtureSha256=sha(fs.readFileSync(fileURLToPath(import.meta.url)));
 assert.match(expectedFixtureSha256??'',/^[a-f0-9]{64}$/,'explicit received fixture SHA256 required');
 assert.equal(fixtureSha256,expectedFixtureSha256,'native fixture source changed before effects');
-assert.equal(scenario,'frozen-resident-reload-v1','only the received frozen-case scenario is admitted');
+assert.equal(scenario,'linked-frozen-resident-reload-v2','only the received registered-link frozen-case scenario is admitted');
 assert.ok(!fs.existsSync(output)&&!fs.existsSync(output+'.intent.json'),'unique receipt required');
 const f=admissionFixture(),root=f.root,uid=process.getuid(),name='admission-fixture-'+randomBytes(8).toString('hex');
 const unit='ci-runner-'+name+'.service',fragment=path.join(os.homedir(),'.config/systemd/user',unit),dropdir=fragment+'.d';
@@ -34,9 +34,11 @@ try{
  fs.writeFileSync(path.join(runnerRoot,'.env'),'ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/fixture/not-executed\n',{mode:0o600});
  const gh=path.join(root,'fixture-gh');
  fs.writeFileSync(gh,'#!'+process.execPath+'\nconst a=process.argv.slice(2);if(!a.includes("GET")||a.includes("POST"))process.exit(19);console.log(JSON.stringify({total_count:1,runners:[{id:42,name:'+JSON.stringify(name)+',status:"offline",busy:false,labels:[]}]}));\n',{mode:0o700});
- fs.writeFileSync(fragment,'[Unit]\nDescription=Owned original CI admission fixture\n[Service]\nType=simple\nWorkingDirectory='+runnerRoot+'\nExecStartPre=/usr/bin/touch '+sentinel+'\nExecStart='+runnerRoot+'/run.sh\n',{flag:'wx',mode:0o600});
- ownedFragment={ino:fs.statSync(fragment).ino,sha256:sha(fs.readFileSync(fragment))};
- const fragmentInode=fs.statSync(fragment).ino;
+ const fragmentSource=path.join(root,'units',unit);fs.mkdirSync(path.dirname(fragmentSource));
+ fs.writeFileSync(fragmentSource,'[Unit]\nDescription=Owned original CI admission fixture\n[Service]\nType=simple\nWorkingDirectory='+runnerRoot+'\nExecStartPre=/usr/bin/touch '+sentinel+'\nExecStart='+runnerRoot+'/run.sh\n',{flag:'wx',mode:0o600});
+ fs.symlinkSync(fragmentSource,fragment);
+ const fragmentLink=fs.lstatSync(fragment);ownedFragment={ino:fragmentLink.ino,sha256:sha(fs.readFileSync(fragment)),target:fragmentSource};
+ const fragmentInode=fragmentLink.ino;
  systemctl('daemon-reload');systemctl('start',unit);assert.ok(fs.existsSync(sentinel));systemctl('freeze',unit);report.baseline=native();assert.ok(Number(report.baseline.MainPID)>0);fs.unlinkSync(sentinel);
  const runtime=path.join(root,'runtime');fs.mkdirSync(path.join(runtime,'src'),{recursive:true});fs.mkdirSync(path.join(runtime,'scripts'));
  const original=fileURLToPath(new URL('../',import.meta.url));
@@ -44,6 +46,7 @@ try{
   const data=fs.readFileSync(path.join(original,p)),target=path.join(runtime,p);fs.writeFileSync(target,data,{mode:0o600});return{path:target,sha256:sha(data)};
  });
  const record={...f.record,controls:{mode:'existing-flat',uid,home:os.homedir(),directory:path.join(root,'controls'),parametersPath:path.join(root,'ci.json'),runtime:{node:process.execPath,cli:path.join(runtime,'scripts/ci-runner-host.mjs'),files}},runners:[{name,root:runnerRoot,scope:'https://github.com/fixture/owned',labels:[],registration:{executable:gh},existing:{id:42,unitFragment:fragment,unitFragmentSha256:sha(fs.readFileSync(fragment))}}]};
+ record.runners[0].existing.unitFragmentLink={target:fragmentSource,device:String(fragmentLink.dev),inode:String(fragmentLink.ino),uid:fragmentLink.uid};
  const pauseSource=process.env.WSL_QUARANTINE_SOURCE??fileURLToPath(new URL('../../wsl-host-service/src/user-unit-quarantine.mjs',import.meta.url));
  const pauseBytes=fs.readFileSync(pauseSource),pauseModule=path.join(root,'provider/src/user-unit-quarantine.mjs');fs.writeFileSync(pauseModule,pauseBytes,{mode:0o400});record.controls.pauseProvider={module:pauseModule,sha256:sha(pauseBytes)};
  const originalPause=await import(new URL('file://'+pauseModule).href),section=path.join(root,'ci-native-operations-services-section');fs.mkdirSync(section,{mode:0o700});
@@ -88,7 +91,8 @@ try{
  const job=spawnSync(hook,[],{encoding:'utf8',timeout:15000,maxBuffer:16384});assert.ifError(job.error);assert.equal(job.status,1);assert.match(job.stderr,/unknown or zero job peak/);report.job={status:job.status,stdout:job.stdout,stderr:job.stderr};
  fs.appendFileSync(record.controls.runtime.cli,'\nthrow Error("fixture source must never execute");\n');
  const drift=spawnSync(hook,[],{encoding:'utf8',timeout:15000,maxBuffer:16384});assert.ifError(drift.error);assert.equal(drift.status,1);assert.ok(!drift.stderr.includes('fixture source must never execute'),'source digest guard must precede changed module execution');report.sourceDrift={status:drift.status,stdout:drift.stdout,stderr:drift.stderr};
- assert.equal(fs.statSync(fragment).ino,fragmentInode);assert.equal(sha(fs.readFileSync(fragment)),record.runners[0].existing.unitFragmentSha256);
+ assert.equal(fs.lstatSync(fragment).ino,fragmentInode);assert.equal(fs.readlinkSync(fragment),fragmentSource);assert.equal(sha(fs.readFileSync(fragment)),record.runners[0].existing.unitFragmentSha256);
+ report.originalUnitLink={path:fragment,target:fragmentSource,device:String(fragmentLink.dev),inode:String(fragmentLink.ino),uid:fragmentLink.uid,unchanged:true,targetSha256:record.runners[0].existing.unitFragmentSha256};
  report.terminal=native();terminal=report.terminal.ActiveState==='inactive'&&report.terminal.MainPID==='0'&&report.terminal.ControlPID==='0'&&report.terminal.Job===''&&report.terminal.ControlGroup==='';assert.ok(terminal,'native fixture is not terminal; retain custody');
  report.phase='qualified';
 }catch(error){report.failure={name:error.name,message:error.message};throw error;}
@@ -99,7 +103,7 @@ finally{
    const files=[];const walk=dir=>{for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,ent.name),st=fs.lstatSync(p);assert.ok(!st.isSymbolicLink(),'unexpected fixture redirect; custody retained');assert.ok(files.length<128,'unexpected fixture growth; custody retained');if(ent.isDirectory())walk(p);else files.push({path:p,bytes:st.size,sha256:sha(fs.readFileSync(p))});}};walk(root);report.retiredManifest=files;
    if(ownedPause){for(const [p,ino,hash] of [[ownedPause.guard,ownedPause.guardInode,ownedPause.guardSha256],[ownedPause.marker,ownedPause.markerInode,ownedPause.markerSha256]])if(fs.existsSync(p)){assert.equal(fs.statSync(p).ino,ino);assert.equal(sha(fs.readFileSync(p)),hash);fs.unlinkSync(p);}}
    const dropin=path.join(dropdir,'80-ci-runner-host-admission.conf');if(fs.existsSync(dropin)){assert.ok(ownedDropin&&fs.statSync(dropin).ino===ownedDropin.ino&&sha(fs.readFileSync(dropin))===ownedDropin.sha256,'native drop-in custody changed');fs.unlinkSync(dropin);}if(fs.existsSync(dropdir))fs.rmdirSync(dropdir);
-   if(fs.existsSync(fragment)){assert.ok(ownedFragment&&fs.statSync(fragment).ino===ownedFragment.ino&&sha(fs.readFileSync(fragment))===ownedFragment.sha256,'native fragment custody changed');fs.unlinkSync(fragment);}systemctl('daemon-reload');
+   if(fs.existsSync(fragment)){assert.ok(ownedFragment&&fs.lstatSync(fragment).ino===ownedFragment.ino&&fs.readlinkSync(fragment)===ownedFragment.target&&sha(fs.readFileSync(fragment))===ownedFragment.sha256,'native fragment custody changed');fs.unlinkSync(fragment);}systemctl('daemon-reload');
    assert.equal(fs.statSync(root).ino,intent.rootInode);f.cleanup();report.cleanup={unitFragmentAbsent:!fs.existsSync(fragment),dropdirAbsent:!fs.existsSync(dropdir),rootAbsent:!fs.existsSync(root)};
   }else report.cleanup={retained:true,reason:'native fixture state not received terminal; no cleanup'};
  }catch(error){report.cleanup={retained:true,name:error.name,message:error.message};process.exitCode=1;}

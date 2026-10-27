@@ -116,3 +116,24 @@ test('missing or unexpected configured job hook cannot be reported current from 
  assert.equal((await observe(f.record,{registrationRun:f.registrationRun,...f.controlsPorts}))[0].status,'drift');
  await assert.rejects(apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),/installed controls not received/);
 }));
+function registeredUnitLink(f){
+ const target=path.join(path.dirname(f.root),'units',path.basename(f.fragment));fs.mkdirSync(path.dirname(target));fs.renameSync(f.fragment,target);fs.symlinkSync(target,f.fragment);
+ const st=fs.lstatSync(f.fragment);f.runner.existing.unitFragmentLink={target,device:String(st.dev),inode:String(st.ino),uid:st.uid};f.save();return target;
+}
+test('original registered unit link and canonical source survive controls/idempotence without any link write',run(async f=>{
+ const target=registeredUnitLink(f),link=fs.lstatSync(f.fragment),source=fs.statSync(target),hash=sha(fs.readFileSync(target));
+ await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts});assert.equal(fs.lstatSync(f.fragment).ino,link.ino);assert.equal(fs.readlinkSync(f.fragment),target);assert.equal(fs.statSync(target).ino,source.ino);assert.equal(sha(fs.readFileSync(target)),hash);
+ assert.deepEqual(await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),[]);assert.equal(f.reloads,1);
+}));
+test('undeclared or foreign registered-link target and changed native link identity refuse before controls',async()=>{
+ for(const change of [f=>{delete f.runner.existing.unitFragmentLink;},f=>{f.runner.existing.unitFragmentLink.target=path.join(f.root,'foreign');},f=>{f.runner.existing.unitFragmentLink.inode='1';},f=>{f.runner.existing.unitFragmentSha256='0'.repeat(64);}]){
+  const f=await fixture();try{registeredUnitLink(f);change(f);f.save();await assert.rejects(apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}));assert.ok(!fs.existsSync(f.record.controls.directory));}finally{f.cleanup();}
+ }
+});
+test('registered unit link retarget or canonical target inode replacement during reload remains unreceived',async()=>{
+ for(const retarget of [true,false]){const f=await fixture();try{
+  const target=registeredUnitLink(f),other=path.join(path.dirname(target),'other.service');fs.copyFileSync(target,other);const reload=f.controlsPorts.reload;
+  f.controlsPorts.reload=()=>{reload();if(retarget){fs.unlinkSync(f.fragment);fs.symlinkSync(other,f.fragment);}else fs.renameSync(other,target);};
+  await assert.rejects(apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),/changed|drift/);assert.equal(f.kernel.freeze,'1');assert.ok(fs.existsSync(f.q.marker));
+ }finally{f.cleanup();}}
+});
