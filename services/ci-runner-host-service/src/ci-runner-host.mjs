@@ -395,5 +395,5 @@ export async function apply(record, { now = false, registrationRun=execFileSync,
 
 export async function observeExistingControls(record,{registrationRun=execFileSync,...ports}={}){
   const plan=await planExistingControls(record,{...ports,registration:r=>readRunnerRegistration(r,{run:registrationRun})});
-  return plan.units.map(unit=>({id:unit.name,status:plan.files.filter(file=>[unit.hook,unit.dropin].includes(file.path)).every(file=>file.current)?'current':'drift',detail:'original flat registration bound; startup/job refusal controls; resident environment unchanged'}));
+  return plan.units.map(unit=>({id:unit.name,status:unit.loaded&&plan.files.filter(file=>[unit.hook,unit.dropin].includes(file.path)).every(file=>file.current)?'current':'drift',detail:'original flat registration/pause received; startup condition and configured job hook received only when current; resident environment unchanged'}));
 }
