@@ -15,11 +15,10 @@ test('wrong host, credentials, mutable paths or methods refuse before supplier c
 test('a nonexistent declared archive stays in original owner custody',()=>{
  assert.equal(tarballPath(runner),'/owner/data/logs/runner.tgz');
 });
-test('a native config failure cannot expose or retain token-bearing command diagnostics',()=>{
- const token='fixture-registration-token';
- assert.throws(()=>configureRunner({...runner,root:'/owner/data/state/runner'},token,{run:(_command,args,options)=>{
-  assert.ok(args.includes(token));assert.ok(!args.includes('--replace'));assert.equal(options.stdio,'ignore');throw Error('native failed with '+token);
- }}),error=>!error.message.includes(token)&&!error.cause&&/withheld/.test(error.message));
+test('unadmitted native config cannot expose a token-bearing command or execute it',()=>{
+ const token='fixture-registration-token';let calls=0;
+ assert.throws(()=>configureRunner({...runner,root:'/owner/data/state/runner'},token,{run:()=>{calls++;throw Error('native failed with '+token);}}),error=>!error.message.includes(token)&&!error.cause&&/issued original host admission/.test(error.message));
+ assert.equal(calls,0);
 });
 test('foreign local registration refuses before downloading, linking or unit effects',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-registration-'));
@@ -54,14 +53,14 @@ test('retained local id must match the actual native remote id before any materi
   assert.equal(preflightRunnerRegistration({...runner,root},{run:read}).local.id,42);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
-test('token supplier errors discard native stdout, stderr and command custody',()=>{
+test('unadmitted token supplier is never called beyond original read-only metadata',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-token-'));let called=0;
  try{
   assert.throws(()=>registerRunner({...runner,root},[],{run:(_exe,args)=>{
    called++;if(args.includes('GET'))return JSON.stringify({total_count:0,runners:[]});
    throw Object.assign(Error('fixture-secret-token'),{stdout:'fixture-secret-token',stderr:'fixture-secret-token'});
-  }}),error=>error.code==='runner-registration-token-unavailable'&&!JSON.stringify(error).includes('fixture-secret-token')&&!error.message.includes('fixture-secret-token')&&!error.cause&&!error.stdout&&!error.stderr);
-  assert.equal(called,2);assert.deepEqual(fs.readdirSync(root),[]);
+  }}),error=>/issued original host admission/.test(error.message)&&!JSON.stringify(error).includes('fixture-secret-token')&&!error.message.includes('fixture-secret-token')&&!error.cause&&!error.stdout&&!error.stderr);
+  assert.equal(called,1);assert.deepEqual(fs.readdirSync(root),[]);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('actual API id, online state and labels receive the resource',()=>{
