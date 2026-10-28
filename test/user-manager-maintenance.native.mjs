@@ -5,7 +5,7 @@
 import assert from'node:assert/strict';
 import{execFileSync}from'node:child_process';
 import{createHash}from'node:crypto';
-import{mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,readdirSync,lstatSync,chmodSync}from'node:fs';
+import{mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,readdirSync,lstatSync,chmodSync,symlinkSync}from'node:fs';
 import{join,resolve}from'node:path';
 import{tmpdir}from'node:os';
 import{setTimeout as pause}from'node:timers/promises';
@@ -31,7 +31,8 @@ writeFileSync(join(root,'app.mjs'),`import{existsSync,readFileSync,writeFileSync
 write('fixture.target','[Unit]\nDefaultDependencies=no\nWants=dbus.socket\nAfter=dbus.socket\n');
 write('dbus.socket','[Unit]\nDefaultDependencies=no\n[Socket]\nListenStream=%t/bus\nSocketMode=0600\n');
 write('dbus.service','[Unit]\nDefaultDependencies=no\nRequires=dbus.socket\nAfter=dbus.socket\n[Service]\nType=notify\nNotifyAccess=main\nExecStart=/usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only\n');
-write('app.service',`[Unit]\nDefaultDependencies=no\n[Service]\nType=simple\nEnvironmentFile=${credentialFile}\nLoadCredential=fixture:${credential}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'app.mjs')} ${appCount} ${portFile}\nRestart=on-failure\nRestartSec=1\n`);
+write('app.service',`[Unit]\nDefaultDependencies=no\nRequires=once.service\nAfter=once.service\n[Service]\nType=simple\nEnvironmentFile=${credentialFile}\nLoadCredential=fixture:${credential}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'app.mjs')} ${appCount} ${portFile}\nRestart=on-failure\nRestartSec=1\n`);
+symlinkSync('app.service',join(units,'app-alias.service'));
 write('once.service',`[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'once.mjs')} ${onceCount}\n`);
 write('held.service',`[Unit]\nDefaultDependencies=no\nConditionPathExists=!${marker}\n[Service]\nExecCondition=/usr/bin/test ! -e ${marker}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'held.mjs')} ${heldCount}\nRestart=always\nRestartSec=1\nRuntimeMaxSec=45\n`);
 write('clock.service','[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nExecStart=/usr/bin/true\n');
@@ -40,7 +41,7 @@ const input={type:'LinuxUserManagerMaintenance',version:1,id:'whole-native-recei
 const port=nativeUserManagerPort(input),environment={...process.env,XDG_RUNTIME_DIR:runtime,DBUS_SESSION_BUS_ADDRESS:'unix:path='+runtime+'/bus'};
 const user=(...args)=>run('/usr/bin/systemctl',['--user',...args],environment);
 async function waitFor(label,fn){const until=Date.now()+15000;let last;while(Date.now()<until){try{const result=await fn();if(result)return result}catch(e){last=e.message}await pause(100)}throw Error(label+' deadline'+(last?': '+last.split('\n')[0]:''))}
-const received={type:'LinuxUserManagerNativeMaintenanceQualification',version:1,managerUnit,controllerUnit,root,runtime,source:{maintenance:hash(readFileSync(fileURLToPath(new URL('../scripts/user-manager-maintenance.mjs',import.meta.url)))),importer:hash(readFileSync(fileURLToPath(new URL('../scripts/import-user-manager-environment.mjs',import.meta.url))))},phases:[]};
+const received={type:'LinuxUserManagerNativeMaintenanceQualification',version:1,managerUnit,controllerUnit,root,runtime,source:{maintenance:hash(readFileSync(fileURLToPath(new URL('../scripts/user-manager-maintenance.mjs',import.meta.url)))),importer:hash(readFileSync(fileURLToPath(new URL('../scripts/import-user-manager-environment.mjs',import.meta.url)))),bindingObserver:hash(readFileSync(fileURLToPath(new URL('../scripts/user-manager-binding-observation.py',import.meta.url))))},phases:[]};
 const importer={type:'LinuxUserManagerEnvironmentImport',version:1,id:'native-credential-reconstruction',work,managerUnit,runtimeDirectory:runtime,importerUnit:controllerUnit,environmentFile:{path:credentialFile,sha256:hash(readFileSync(credentialFile))},bindings:[{from:'FIXTURE_SOURCE',to:'FIXTURE_KEY',sha256:expected}]};
 let managerCreated=false;
 try{
@@ -63,7 +64,7 @@ try{
  act('fence');act('stop');
  await waitFor('all ordinary original cohorts stopped',()=>['app.service','dbus.service','once.service'].every(name=>{const u=port.unit(name);return u.MainPID==='0'&&u.ControlPID==='0'&&!u.ControlGroup&&!u.Job&&['inactive','failed'].includes(u.ActiveState)}));
  act('restart');await waitFor('new real system manager',()=>{const m=port.manager();return m.ActiveState==='active'&&m.SystemdUser&&m.MainPID!==JSON.parse(readFileSync(join(work,input.id+'.json'),'utf8')).manager.MainPID});
- await waitFor('replacement terminal receiving',()=>{try{act('receive-restart');return true}catch{return false}});
+ await waitFor('replacement terminal receiving',()=>{try{return act('receive-restart').phase==='restarted'}catch{return false}});
  assert.throws(()=>act('restore'),/environment not reconstructed/);
  assert.equal(readFileSync(appCount,'utf8'),'1');
  received.reconstructedEnvironment=importUserManagerEnvironment(importer);
@@ -76,7 +77,7 @@ try{
  assert.deepEqual(received.counters,{app:'2',completed:'1',held:'1'});assert.equal(hash(readFileSync(marker)),received.originalMarker);
  const held=port.unit('held.service');assert.equal(held.MainPID,'0');assert.equal(held.ActiveState,'inactive');assert.equal(held.FreezerState,'running');
  received.normalNativeCredentialInputVerified=true;received.completedCounterNotReplayed=true;received.heldEntryNotRestarted=true;received.originalMarkerUnchanged=true;received.qualified=true;
-}catch(e){received.qualified=false;received.error=e.message;process.exitCode=1}
+}catch(e){received.qualified=false;received.error=e.message;received.failureUnits=['app.service','app-alias.service','once.service','dbus.service'].map(name=>{try{return port.unit(name)}catch{return{Id:name,observation:'unavailable'}}});process.exitCode=1}
 finally{
  if(managerCreated){try{sys('stop',managerUnit)}catch(e){received.managerStopError=e.message;received.qualified=false;process.exitCode=1}}
  const status=run('/usr/bin/systemctl',['show',managerUnit,'--property=LoadState,MainPID,ControlGroup']);

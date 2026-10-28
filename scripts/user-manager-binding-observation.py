@@ -49,12 +49,15 @@ def observe(name):
             raise ValueError("original credential source is unresolved")
         starts = [row[:3] for row in get("ExecStart")]
         conditions = [row[:3] for row in get("ExecCondition")]
+        unit_conditions = plain(properties.Get("org.freedesktop.systemd1.Unit", "Conditions"))
+        drop_ins = plain(properties.Get("org.freedesktop.systemd1.Unit", "DropInPaths"))
         operands = [row["path"] for row in inputs]
         for row in starts + conditions:
             operands += [row[0], *row[1]]
         profiles = sorted(set(path for operand in operands for path in re.findall(r"/var/guix/profiles/per-user/[^/\s]+/[^/\s]+|/home/[^/\s]+/\.guix-profile", operand)))
-        return {"unit": name, "inputFiles": inputs, "profiles": profiles,
+        return {"unit": name, "inputFiles": inputs, "profiles": profiles, "dropInPaths": drop_ins,
                 "startCommandsSha256": digest(starts), "conditionSha256": [digest(row) for row in conditions],
+                "unitConditionSha256": [digest(row[:4]) for row in unit_conditions],
                 "environmentSha256": digest(get("Environment")),
                 "inlineCredentialsSha256": digest([get("SetCredential"), get("SetCredentialEncrypted")])}
     finally:
