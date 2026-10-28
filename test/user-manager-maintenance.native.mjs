@@ -26,6 +26,7 @@ const expected=hash(process.env.FIXTURE_SOURCE||'');
 assert.ok(process.env.FIXTURE_SOURCE,'native system controller EnvironmentFile input absent');
 const appCount=join(root,'app.count'),onceCount=join(root,'once.count'),heldCount=join(root,'held.count'),portFile=join(root,'app.port'),marker=join(root,'original.pending');
 const transientOnceCount=join(root,'transient-once.count'),transientRunCount=join(root,'transient-run.count'),transientEndCount=join(root,'transient-end.count');
+const workerCount=join(root,'worker.count');
 writeFileSync(join(root,'once.mjs'),`import{existsSync,readFileSync,writeFileSync}from'node:fs';const p=process.argv[2];writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,'utf8')):0)+1),{mode:0o600});\n`,{mode:0o600});
 writeFileSync(join(root,'held.mjs'),`import{existsSync,readFileSync,writeFileSync}from'node:fs';const p=process.argv[2];writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,'utf8')):0)+1),{mode:0o600});setInterval(()=>{},1000);\n`,{mode:0o600});
 writeFileSync(join(root,'app.mjs'),`import{existsSync,readFileSync,writeFileSync}from'node:fs';import{createServer}from'node:http';import{createHash}from'node:crypto';import{join}from'node:path';const h=x=>createHash('sha256').update(x).digest('hex');if(h(process.env.FIXTURE_KEY||'')!==${JSON.stringify(expected)}||h(readFileSync(join(process.env.CREDENTIALS_DIRECTORY,'fixture')))!==${JSON.stringify(expected)})throw Error('normal credential reconstruction absent');const[c,p]=process.argv.slice(2);writeFileSync(c,String((existsSync(c)?Number(readFileSync(c,'utf8')):0)+1),{mode:0o600});const server=createServer((_,r)=>r.end('original programme\\n'));server.listen(existsSync(p)?Number(readFileSync(p,'utf8')):0,'127.0.0.1',()=>{if(!existsSync(p))writeFileSync(p,String(server.address().port),{mode:0o600})});\n`,{mode:0o600});
@@ -34,6 +35,7 @@ write('dbus.socket','[Unit]\nDefaultDependencies=no\n[Socket]\nListenStream=%t/b
 write('dbus.service','[Unit]\nDefaultDependencies=no\nRequires=dbus.socket\nAfter=dbus.socket\n[Service]\nType=notify\nNotifyAccess=main\nExecStart=/usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only\n');
 write('app.service',`[Unit]\nDefaultDependencies=no\nRequires=once.service\nAfter=once.service\n[Service]\nType=simple\nEnvironmentFile=${credentialFile}\nLoadCredential=fixture:${credential}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'app.mjs')} ${appCount} ${portFile}\nRestart=on-failure\nRestartSec=1\n`);
 write('once.service',`[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'once.mjs')} ${onceCount}\n`);
+write('worker.service',`[Unit]\nDefaultDependencies=no\n[Service]\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'held.mjs')} ${workerCount}\n`);
 write('held.service',`[Unit]\nDefaultDependencies=no\nConditionPathExists=!${marker}\n[Service]\nExecCondition=/usr/bin/test ! -e ${marker}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'held.mjs')} ${heldCount}\nRestart=always\nRestartSec=1\nRuntimeMaxSec=45\n`);
 write('clock.service','[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nExecStart=/usr/bin/true\n');
 write('clock.timer','[Unit]\nDefaultDependencies=no\n[Timer]\nOnActiveSec=1h\nUnit=clock.service\n');
@@ -56,7 +58,7 @@ try{
  run('/usr/bin/systemd-run',['--user','--unit=transient-run.service','--property=DefaultDependencies=no','--property=RuntimeMaxSec=45','--property=ExecStopPost='+process.execPath+' '+join(root,'once.mjs')+' '+transientEndCount,process.execPath,join(root,'held.mjs'),transientRunCount],environment);
  await waitFor('original transient invocations',()=>existsSync(transientOnceCount)&&existsSync(transientRunCount)&&port.unit('transient-once.service').SubState==='exited');
  received.initialEnvironment=importUserManagerEnvironment(importer);
- user('start','app.service','once.service','held.service','clock.timer');
+ user('start','app.service','worker.service','once.service','held.service','clock.timer');
  await waitFor('original app endpoint',()=>existsSync(portFile)&&port.unit('app.service').ActiveState==='active');
  assert.equal(readFileSync(onceCount,'utf8'),'1');assert.equal(readFileSync(heldCount,'utf8'),'1');
  writeFileSync(marker,'test-owned original hold\n',{mode:0o600});
@@ -69,6 +71,14 @@ try{
  const act=action=>{const result=advanceUserManagerMaintenance(input,action);received.phases.push(result);console.log(JSON.stringify({phase:result.phase}));return result};
  act('fence');act('stop');
  await waitFor('all ordinary original cohorts stopped',()=>['app.service','dbus.service','once.service','transient-once.service','transient-run.service'].every(name=>{const u=port.unit(name);return u.MainPID==='0'&&u.ControlPID==='0'&&!u.ControlGroup&&!u.Job&&['inactive','failed'].includes(u.ActiveState)}));
+ const interruptedText=readFileSync(join(work,input.id+'.json'),'utf8'),interrupted=JSON.parse(interruptedText);
+ for(const name of interrupted.serviceFiles)rmSync(join(runtime,'systemd/user',name+'.d','99-persistent-linux-manager-maintenance-'+input.id+'.conf'));
+ user('daemon-reload');user('start','worker.service');
+ act('recover');await waitFor('same-manager original transport',()=>port.unit('dbus.service').SubState==='running'&&port.apiManagerPid()===port.manager().MainPID);
+ act('receive-recovery');
+ const recovery=JSON.parse(readFileSync(join(work,input.id+'.json'),'utf8'));assert.equal(readFileSync(recovery.interruptedOutcomes[0].outcome,'utf8'),interruptedText);
+ received.interruptionConserved=true;assert.ok(recovery.restore.includes('app.service'));
+ act('fence');act('stop');await waitFor('fresh original cohorts stopped',()=>['app.service','worker.service','dbus.service'].every(name=>port.unit(name).MainPID==='0'&&!port.unit(name).Job));
  act('restart');await waitFor('new real system manager',()=>{const m=port.manager();return m.ActiveState==='active'&&m.SystemdUser&&m.MainPID!==JSON.parse(readFileSync(join(work,input.id+'.json'),'utf8')).manager.MainPID});
  await waitFor('replacement terminal receiving',()=>{try{return act('receive-restart').phase==='restarted'}catch{return false}});
  assert.throws(()=>act('restore'),/environment not reconstructed/);
@@ -83,6 +93,7 @@ try{
  assert.deepEqual(received.counters,{app:'2',completed:'1',held:'1'});assert.equal(hash(readFileSync(marker)),received.originalMarker);
  received.transientCounters={completed:readFileSync(transientOnceCount,'utf8'),interrupted:readFileSync(transientRunCount,'utf8'),terminalPost:readFileSync(transientEndCount,'utf8')};
  assert.deepEqual(received.transientCounters,{completed:'1',interrupted:'1',terminalPost:'1'});
+ assert.equal(readFileSync(workerCount,'utf8'),'3');received.workerCounter='3';
  assert.equal(existsSync(join(runtime,'systemd/transient/transient-once.service')),false);
  assert.equal(existsSync(join(runtime,'systemd/transient/transient-run.service')),false);
  const held=port.unit('held.service');assert.equal(held.MainPID,'0');assert.equal(held.ActiveState,'inactive');assert.equal(held.FreezerState,'running');

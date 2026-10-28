@@ -170,7 +170,7 @@ function receiveLoadedGuard(c,name,port,{api=true}={}){
 
 /** Observe native scope before writing any guard. No authority is manufactured
  * by this receipt. The caller must already hold the machine-maintenance work. */
-export function planUserManagerMaintenance(request,port=nativeUserManagerPort(request)){
+function captureUserManagerMaintenance(request,port,restorationOwed=[]){
  const c=requestContext(request,port);refuseJobs(port);
  receiveEnvironment(request,port);
  const manager=port.manager(),active=port.active();
@@ -179,7 +179,7 @@ export function planUserManagerMaintenance(request,port=nativeUserManagerPort(re
  for(const row of active)if(row.unit.endsWith('.scope')&&row.unit!=='init.scope')fail('foreign execution scope remains '+row.unit);
  if(active.some(x=>x.unit==='ssh-agent.service')&&port.keys()!==0)fail('nonempty SSH agent needs original reconstruction custody');
  const aliases=port.aliases().map(name=>({name,unit:port.unit(name).Id}));
- const units=active.filter(x=>x.unit.endsWith('.service')).map(x=>port.unit(x.unit));
+ const units=[...new Set([...active.filter(x=>x.unit.endsWith('.service')).map(x=>x.unit),...restorationOwed])].sort().map(name=>port.unit(name));
  for(const u of units){
   if(u.ControlPID!=='0'||u.Job)fail('consumer control job remains '+u.Id);
   if(u.FreezerState!=='running'&&!empty(u))fail('frozen resident has no terminal receiving '+u.Id);
@@ -195,10 +195,14 @@ export function planUserManagerMaintenance(request,port=nativeUserManagerPort(re
  const profiles=[...new Set(bindings.flatMap(x=>x.profiles))].map(profileIdentity);
  const value={type:'LinuxUserManagerMaintenanceOutcome',version:1,request,phase:'observed',bootId:port.boot(),manager,active,units,activationUnits,
   serviceFiles:names,aliases,configuration:paths.map(fileIdentity),bindings,inputs,profiles,managementUnit:management[0].Id,held:units.filter(x=>x.FreezerState!=='running').map(x=>x.Id),
-  restore:units.filter(x=>x.ActiveState==='active'&&x.SubState==='running'&&x.FreezerState==='running'&&x.MainPID!=='0'&&!transientUnit({units,request},x.Id)).map(x=>x.Id),
+  restore:units.filter(x=>((x.ActiveState==='active'&&x.SubState==='running'&&x.MainPID!=='0')||restorationOwed.includes(x.Id))&&x.FreezerState==='running'&&!transientUnit({units,request},x.Id)).map(x=>x.Id),
   completed:units.filter(x=>x.ActiveState==='active'&&x.SubState==='exited').map(x=>({unit:x.Id,invocationId:x.InvocationID})),
   listeners:listeningEndpoints(units,port),applicationDrained:false,externalEffectsReconciled:false};
  receiveManager(value,port);receiveScope(value,port);receiveFileIdentities(value,port);
+ return{c,value};
+}
+export function planUserManagerMaintenance(request,port=nativeUserManagerPort(request)){
+ const{c,value}=captureUserManagerMaintenance(request,port);
  if(existsSync(c.path))fail('original maintenance outcome already exists; observe its phase');
  atomic(c.path,value);return {phase:value.phase,outcome:c.path,sha256:hash(readFileSync(c.path)),running:value.restore,held:value.held,completed:value.completed};
 }
@@ -218,7 +222,33 @@ export function advanceUserManagerMaintenance(request,action,port=nativeUserMana
   for(const row of p.active.filter(x=>/\.(timer|socket|path)$/.test(x.unit))){const u=port.unit(row.unit);if(!['inactive','failed'].includes(u.ActiveState)||u.Job)fail('activation unit not stopped '+row.unit)}
  };
  if(action==='observe')return {phase:p.phase,outcome:c.path,manager:port.manager(),units:p.units.map(x=>port.unit(x.Id)),held:p.held,restore:p.restore,applicationDrained:false,externalEffectsReconciled:false};
- if(action==='fence'){
+ if(action==='recover'){
+  if(p.phase!=='stopping')fail('interruption receiving requires original stopping phase');
+  receiveManager(p,port);receiveFileIdentities(p,port);receiveEnvironment(request,port);
+  for(const name of p.serviceFiles)if(existsSync(guardPath(c,name)))fail('interruption controls are not wholly absent');
+  const old=p.units.find(u=>u.Id===p.managementUnit),u=port.unit(p.managementUnit);
+  if(!old||transientUnit(p,old.Id)||!terminal(u)||!empty(u)||u.FreezerState!=='running')fail('original management transport is not terminal');
+  equal([u.FragmentPath,u.DropInPaths,u.Type,u.Restart],[old.FragmentPath,old.DropInPaths,old.Type,old.Restart],'original management configuration changed');
+  if(old.MainPID!=='0'&&!port.processAbsent(old.MainPID))fail('original management process remains');
+  const archive=c.path+'.interrupted-'+hash(text)+'.json';
+  if(existsSync(archive))equal(readFileSync(archive,'utf8'),text,'interruption archive changed');else atomic(archive,p);
+  equal(readFileSync(archive,'utf8'),text,'original stopping bytes not conserved');
+  save({phase:'recovering-management',interruption:{at:new Date().toISOString(),outcome:archive,sha256:hash(text),ownControlsAbsent:true,actor:'unknown'}});
+  port.start([p.managementUnit]);
+ }else if(action==='receive-recovery'){
+  if(p.phase!=='recovering-management')fail('fresh receiving requires original interruption request');
+  receiveManager(p,port);receiveFileIdentities(p,port);receiveEnvironment(request,port);
+  const u=port.unit(p.managementUnit);if(u.ActiveState!=='active'||u.SubState!=='running'||u.MainPID==='0'||u.ControlPID!=='0'||u.Job)fail('original management transport not received');
+  equal(port.apiManagerPid(),p.manager.MainPID,'recovered API bus belongs to another manager');receiveBindings(c,p,port);
+  const owed=p.restore.filter(name=>!transientUnit(p,name)),fresh=captureUserManagerMaintenance(request,port,owed).value;
+  const union=(previous,current)=>{const rows=new Map(previous.map(x=>[x.path,x]));for(const x of current){if(rows.has(x.path))equal(rows.get(x.path),x,'original conservation input changed');rows.set(x.path,x)}return[...rows.values()]};
+  fresh.configuration=union(p.configuration.filter(f=>!p.units.some(old=>transientUnit(p,old.Id)&&old.FragmentPath===f.path)),fresh.configuration);
+  fresh.inputs=union(p.inputs,fresh.inputs);fresh.profiles=union(p.profiles,fresh.profiles);
+  fresh.serviceFiles=[...new Set([...p.serviceFiles,...fresh.serviceFiles])].sort();
+  fresh.listeners=[...new Map([...p.listeners.filter(x=>owed.includes(x.unit)),...fresh.listeners].map(x=>[JSON.stringify(x),x])).values()].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const predecessor=p.interruption;
+  save({...fresh,restorationOwed:owed,interruptedOutcomes:[...(p.interruptedOutcomes||[]),predecessor]});
+ }else if(action==='fence'){
   if(!['observed','fencing'].includes(p.phase))fail('fence requires original observed/fencing phase');receiveManager(p,port);receiveScope(p,port);receiveFileIdentities(p,port);receiveCapturedUnits(p,port);receiveBindings(c,p,port);receiveEnvironment(request,port);
   if(p.phase==='observed')save({phase:'fencing'});
   for(const name of p.serviceFiles){

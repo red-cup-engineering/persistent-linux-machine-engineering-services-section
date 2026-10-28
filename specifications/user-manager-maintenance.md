@@ -118,3 +118,14 @@ receipts and are not replayed by host recovery; their restored original
 dispatchers retain responsibility for future work. Persistent configuration
 absence still refuses recovery. Native qualification includes both a completed
 transient invocation and a running transient with a terminal stop-post counter.
+
+If another actor removes all this operation's controls after stopping, the
+original owner can receive that interruption while the original manager is
+unchanged. It archives the exact original stopping outcome, records the actor as
+unknown, receives original configuration and environment, and starts only the
+original management transport from its unchanged native declaration. API-owner
+and native bindings are received before fresh cohorts replace the active
+capture. Original persistent restoration and TCP endpoints still owed remain
+obligations; conserved inputs and profiles and an immutable predecessor link
+remain attached. Existing fence/stop/restart then handles that fresh capture.
+An old restart request is never replayed, and an unknown actor grants no rights.
