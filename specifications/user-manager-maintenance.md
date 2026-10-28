@@ -30,6 +30,7 @@ inputs are received without printing or retaining secret values. Inactive units
 are read on one D-Bus connection using `LoadUnit`/`RefUnit`/`UnrefUnit`; their
 metadata must not depend on another subprocess keeping an object loaded.
 All service files, including templates, receive an owned runtime drop-in with
+a negative `ConditionPathExists` on this operation's existing private outcome,
 `Restart=no` and an appended `ExecCondition=/usr/bin/false`. Existing conditions,
 commands, drop-ins, quarantine markers, profiles and application state are never
 replaced. Actual loaded fences must be received before stopping any consumer.
@@ -42,6 +43,12 @@ manager PID, absence of the old PID, unchanged original configuration and
 terminal held units are separately received before restoration. The caller
 must launch this controller through the original system supervisor; a process
 inside the affected user manager cannot perform this phase.
+Fresh-manager activation units are stopped again before any application fence
+opens. The management bus service derives from its original D-Bus daemon PID and
+native cgroup; only its actually loaded owned fences open first. The operation
+receives that original transport and API owner PID equal to the new manager PID
+before recording `restarted`. This restores the management API without starting
+applications or assuming a fixed publisher-specific service policy.
 Original manager-environment bindings are hash-received before stopping and
 again before restoring applications. The shared Linux importer obtains values
 from an original private environment projection parsed by systemd's own
@@ -58,8 +65,18 @@ Only services that were actually running are restored. Previously completed
 explicitly restarted; frozen held units remain stopped for their original owner
 to finish. Restored timers retain their normal original scheduling semantics;
 this does not establish application-level replay safety for every future job.
+Only fences actually loaded by prior running ordinary services open for their
+restoration. All remaining service fences, including each completed canonical
+unit, remain through ordinary receiving: a `Requires` or `Wants` edge cannot
+replay a completed oneshot during recovery. Installed native aliases are resolved before the original unit snapshots. Actual
+alias/template fence multiplicity and membership are received in one tracked
+D-Bus snapshot, including the native loaded drop-in paths. Remaining controls retire
+after useful ordinary restoration and before future activation; no permanent
+replacement command or suppression shim is installed.
 Restoration receives native service state and each original TCP listening
 endpoint, then restores and receives prior sockets, timers and path units.
+The socket reader explicitly requests Netid with TCP+UDP output, admits TCP
+rows only, and binds their actual local endpoint rather than the peer wildcard.
 Dynamic UDP endpoints and application request completion are separate provider
 receiving; the operation never claims application drain or reconciled external
 effects. The original WSL quarantine completion and CDE replacement receiver
@@ -83,7 +100,8 @@ Those tests are distinct from original-version native fixture qualification and
 the independently received production maintenance outcome.
 The complete CRG native fixture uses two bounded exclusively owned system units
 (outside controller and delegated private manager), actual credential and
-environment sources, a TCP application, a completed oneshot counter, a frozen
+environment sources, a TCP application and native alias requiring the completed
+oneshot counter, a frozen
 empty cohort and a timer. It receives application counter 1→2, completed counter
 1→1, held counter 1→1, unchanged original marker and exact fixture cleanup.
 Native dependencies are the qualified host's Node, systemd tools, Linux procfs/
