@@ -79,6 +79,23 @@ test('missing persistent fragment remains a failed conservation check',t=>{
  const f=fixture(t);f.setup();f.act('fence');f.act('stop');rmSync(f.original);
  assert.throws(()=>f.act('restart'),/ENOENT/);assert.equal(f.calls.some(x=>x[0]==='restart'),false);
 });
+test('interruption receives new cohorts and still-owed restoration without replaying an old restart',t=>{
+ const f=fixture(t);f.setup();f.act('fence');f.act('stop');const old=readFileSync(join(f.work,f.request.id+'.json'),'utf8');
+ for(const name of f.port.files())rmSync(f.guard(name));
+ Object.assign(f.units.get('app.service'),{ActiveState:'active',SubState:'running',MainPID:'777',ControlGroup:'/app',InvocationID:'f'.repeat(32)});
+ f.act('recover');f.act('receive-recovery');assert.equal(f.outcome().phase,'observed');
+ assert.equal(f.outcome().units.find(x=>x.Id==='app.service').MainPID,'777');assert.equal(f.outcome().restore.includes('dbus.service'),true);
+ assert.equal(readFileSync(f.outcome().interruptedOutcomes[0].outcome,'utf8'),old);
+ for(const action of ['fence','stop','restart','receive-restart','receive-restart','restore','receive','receive-activation'])f.act(action);
+ assert.equal(f.outcome().phase,'completed');assert.equal(f.calls.filter(x=>x[0]==='restart').length,1);
+ assert.equal(f.outcome().restore.includes('job.service'),false);
+});
+test('interruption preserves listening endpoints still owed by an inactive original service',t=>{
+ const f=fixture(t);f.setup();f.act('fence');f.act('stop');for(const name of f.port.files())rmSync(f.guard(name));
+ f.act('recover');f.act('receive-recovery');assert.deepEqual(f.outcome().listeners,[{unit:'app.service',protocol:'tcp',local:'127.0.0.1:8080'}]);
+ for(const a of ['fence','stop','restart','receive-restart','receive-restart','restore','receive','receive-activation'])f.act(a);
+ assert.equal(f.outcome().phase,'completed');
+});
 test('foreign execution scope refuses before any control effect',t=>{
  const f=fixture(t),old=f.port.active;f.port.active=()=>[...old(),{unit:'original-work.scope',active:'active',sub:'running'}];
  assert.throws(()=>f.setup(),/foreign execution scope/);assert.deepEqual(f.calls,[]);
