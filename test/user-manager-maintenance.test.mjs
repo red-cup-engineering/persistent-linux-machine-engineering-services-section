@@ -64,6 +64,21 @@ test('all loaded native alias fences are received and retired together',t=>{
  assert.equal(f.outcome().phase,'completed');assert.equal(f.outcome().restorationFences.includes('app-alias.service'),true);
  for(const name of f.port.files())assert.equal(existsSync(f.guard(name)),false);
 });
+test('terminal transient fragments expire without replaying completed or interrupted invocations',t=>{
+ const f=fixture(t),directory=join(f.runtime,'systemd/transient');mkdirSync(directory,{recursive:true,mode:0o700});
+ const completed=f.units.get('job.service'),running={...f.units.get('app.service'),Id:'transient-run.service',MainPID:'203',ControlGroup:'/transient-run'};
+ f.units.set(running.Id,running);
+ for(const u of [completed,running]){u.FragmentPath=join(directory,u.Id);writeFileSync(u.FragmentPath,'[Service]\nExecStart=/immutable/original\n',{mode:0o600})}
+ f.setup();assert.equal(f.outcome().restore.includes(running.Id),false);f.act('fence');f.act('stop');
+ for(const u of [completed,running])rmSync(u.FragmentPath);
+ for(const a of ['restart','receive-restart','receive-restart','restore','receive','receive-activation'])f.act(a);
+ assert.equal(f.outcome().phase,'completed');assert.deepEqual(f.outcome().retiredTransientInvocations.map(x=>x.unit),['job.service','transient-run.service']);
+ assert.equal(f.calls.filter(x=>x[0]==='start').flatMap(x=>x[1]).some(x=>[completed.Id,running.Id].includes(x)),false);
+});
+test('missing persistent fragment remains a failed conservation check',t=>{
+ const f=fixture(t);f.setup();f.act('fence');f.act('stop');rmSync(f.original);
+ assert.throws(()=>f.act('restart'),/ENOENT/);assert.equal(f.calls.some(x=>x[0]==='restart'),false);
+});
 test('foreign execution scope refuses before any control effect',t=>{
  const f=fixture(t),old=f.port.active;f.port.active=()=>[...old(),{unit:'original-work.scope',active:'active',sub:'running'}];
  assert.throws(()=>f.setup(),/foreign execution scope/);assert.deepEqual(f.calls,[]);

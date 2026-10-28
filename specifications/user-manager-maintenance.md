@@ -107,3 +107,14 @@ empty cohort and a timer. It receives application counter 1→2, completed count
 Native dependencies are the qualified host's Node, systemd tools, Linux procfs/
 cgroup interfaces, `ss`, sudo and installed Python D-Bus client. The Python
 observer emits only native metadata and hashes, never credential property bytes.
+
+A transient invocation is identified by its captured native fragment at the
+selected runtime's exact `systemd/transient/<unit>` path. Once its original
+process and cgroup are terminal, systemd may collect that ephemeral fragment.
+The outcome retains the original configuration hashes and receives current
+terminal absence; it never recreates the invocation. Persistent services form
+the restoration set. Interrupted transient jobs retain their own stop-post
+receipts and are not replayed by host recovery; their restored original
+dispatchers retain responsibility for future work. Persistent configuration
+absence still refuses recovery. Native qualification includes both a completed
+transient invocation and a running transient with a terminal stop-post counter.
