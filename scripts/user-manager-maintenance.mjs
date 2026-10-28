@@ -37,7 +37,7 @@ export function nativeUserManagerPort(request){
   unit:name=>parse(user('show',name,'--property='+properties)),
   active:()=>JSON.parse(user('list-units','--all','--type=service,socket,timer,path,scope','--output=json','--no-pager')).filter(x=>!['inactive','failed'].includes(x.active)).map(x=>({unit:x.unit,active:x.active,sub:x.sub})).sort((a,b)=>a.unit.localeCompare(b.unit)),
   files:()=>JSON.parse(user('list-unit-files','--type=service','--output=json','--no-pager')).map(x=>x.unit_file).filter(service).sort(),
-  aliases:()=>JSON.parse(user('list-unit-files','--type=service','--state=alias','--output=json','--no-pager')).map(x=>x.unit_file).filter(service).sort(),
+  aliases:()=>JSON.parse(user('list-unit-files','--type=service','--output=json','--no-pager')).filter(x=>x.state==='alias').map(x=>x.unit_file).filter(service).sort(),
   bindings:name=>{try{return JSON.parse(execFileSync('/usr/bin/python3',[fileURLToPath(new URL('./user-manager-binding-observation.py',import.meta.url)),name],{env:environment,encoding:'utf8',timeout:15000,maxBuffer:1048576}))}catch{fail('native unit binding observation unread '+name)}},
   jobs:()=>user('list-jobs','--output=json','--no-pager').trim(),
   keys:()=>{try{const text=run('/usr/bin/env',['SSH_AUTH_SOCK='+request.runtimeDirectory+'/openssh_agent','/usr/bin/ssh-add','-l']);return text.trim().split('\n').filter(Boolean).length}catch(e){if(e.status===1&&e.stdout?.includes('The agent has no identities.'))return 0;fail('SSH agent identity custody is unknown')}},

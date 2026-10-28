@@ -32,7 +32,6 @@ write('fixture.target','[Unit]\nDefaultDependencies=no\nWants=dbus.socket\nAfter
 write('dbus.socket','[Unit]\nDefaultDependencies=no\n[Socket]\nListenStream=%t/bus\nSocketMode=0600\n');
 write('dbus.service','[Unit]\nDefaultDependencies=no\nRequires=dbus.socket\nAfter=dbus.socket\n[Service]\nType=notify\nNotifyAccess=main\nExecStart=/usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only\n');
 write('app.service',`[Unit]\nDefaultDependencies=no\nRequires=once.service\nAfter=once.service\n[Service]\nType=simple\nEnvironmentFile=${credentialFile}\nLoadCredential=fixture:${credential}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'app.mjs')} ${appCount} ${portFile}\nRestart=on-failure\nRestartSec=1\n`);
-symlinkSync('app.service',join(units,'app-alias.service'));
 write('once.service',`[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'once.mjs')} ${onceCount}\n`);
 write('held.service',`[Unit]\nDefaultDependencies=no\nConditionPathExists=!${marker}\n[Service]\nExecCondition=/usr/bin/test ! -e ${marker}\nExecStart=${process.execPath} --max-old-space-size=24 ${join(root,'held.mjs')} ${heldCount}\nRestart=always\nRestartSec=1\nRuntimeMaxSec=45\n`);
 write('clock.service','[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nExecStart=/usr/bin/true\n');
@@ -49,6 +48,9 @@ try{
  managerCreated=true;
  await waitFor('private native manager',()=>existsSync(runtime+'/systemd/private')&&port.manager().ActiveState==='active');
  user('start','dbus.service');await waitFor('private API owner',()=>port.apiManagerPid()===port.manager().MainPID);
+ assert.deepEqual(port.aliases(),[]);received.emptyAliasSelectionReceived=true;
+ symlinkSync('app.service',join(units,'app-alias.service'));user('daemon-reload');
+ assert.deepEqual(port.aliases(),['app-alias.service']);
  received.initialEnvironment=importUserManagerEnvironment(importer);
  user('start','app.service','once.service','held.service','clock.timer');
  await waitFor('original app endpoint',()=>existsSync(portFile)&&port.unit('app.service').ActiveState==='active');
