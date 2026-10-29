@@ -1,0 +1,133 @@
+{
+  "id": "bounded-user-manager-maintenance-continuation",
+  "kind": "requirement",
+  "name": "One original user-manager maintenance continuation within shared deployment custody",
+  "raised-by": "codex-publisher-quarantine-completion",
+  "office": "chief-engineering-officer",
+  "duty": "operating-engineering-release-and-recovery",
+  "asks": "NO ACTUALLY FIX tHE REGISTRY SHIT THEN\n\nSTOP ROUTING AROUND DAMAGE YOU CAUSED AND ABANDONED: it just causes more damage.\n\nFIX THE DAMAGE\n\nSTOP PRESERVING BACKCOMPAT AND SHIMS\n\nTHIS IS EARLY ALPHA CODE\n\nFIND WORK THAT IS UNFINISHED AND FINISH IT, NOT BY RECONCILING BOTH DIRECTIONS BUT BY FINISHING THE WORK",
+  "source-demand": {
+    "existing-campaign": "https://github.com/561-group/internal-services-section/issues/390",
+    "delegated-outcome": "Finish one existing typed phase-machine CLI plus the original immutable environment importer so the deployment owner can retain its original kernel mutex and promotion custody across the complete maintenance, then finish the original WSL quarantine and useful automatic publication.",
+    "original-operating-custody": "cold-red-gate-services-section/data/state/user-manager-maintenance-preparation-service-state/operating-20261028b/registry-repair-user-manager-20261028b.json",
+    "original-parameters": "cold-red-gate-services-section/data/state/user-manager-maintenance-preparation-service-state/operating-20261028b/maintenance-parameters.json"
+  },
+  "accepted-predecessors": [
+    {
+      "owner": "red-cup-engineering/persistent-linux-machine-engineering-services-section",
+      "commit": "34f5cf6ec70113d9c2e55e41fa685de28fe16e2b",
+      "specification": "specifications/user-manager-maintenance.md",
+      "operations": [
+        "advanceUserManagerMaintenance",
+        "nativeUserManagerPort",
+        "importUserManagerEnvironment"
+      ],
+      "maintenance-source-sha256": "e7d1d2fd948bc5444b24a52aeb4bf4f670a98216e620433c977c39b8221dadb6",
+      "independent-receiving": "Original producer/receiver source review, 23 source cases, full native fixture K with exact stopping archive, interruption, current-cohort receiving, environment reconstruction, persistent restoration, original endpoints and non-replay.",
+      "native-receiving": "cold-red-gate-services-section/data/state/user-manager-maintenance-preparation-service-state/native-fixture-k/linux-manager-maintenance-fixture-manager-20261028k.service.receiving.json"
+    }
+  ],
+  "inferences": [
+    {
+      "status": "engineering-proposal",
+      "says": "A continuation is needed because separate process invocations leave gaps in the deployment owner's kernel mutex lifetime; the continuation supplies one bounded command and does not implement a second manager or new authorization route."
+    },
+    {
+      "status": "engineering-proposal",
+      "says": "The existing unqualified hand-written continuation proposal is reference evidence only and must not be passed off as source-free fabrication or independent assay material."
+    }
+  ],
+  "met-when": [
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:one-owner",
+      "target": "held",
+      "says": "The continuation engine is part of the existing persistent Linux machine engineering owner, composes its accepted maintenance and environment-import operations, and creates no competing manager, lock, journal, credential store or compatibility interface."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:parameters",
+      "target": "held",
+      "says": "The engine receives its maintenance request, original environment-import request, interruption-receiving choice, polling interval, phase wait and overall duration bounds as checked parameters; hosts, units, providers, account names, paths and budgets are not hardcoded policy."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:whole-window",
+      "target": "held",
+      "says": "One native controller outside the affected user-manager subtree runs the original complete continuation so the deployment owner can retain its own genuine kernel and promotion custody across all phases and receive the original terminal outcome."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:original-inputs",
+      "target": "held",
+      "says": "The executable boundary accepts only original source-bound maintenance and import parameter bytes whose identities and complete same-manager environment mappings are already covered by the maintenance inputs, without adding an authorization flag or accepting unknown actor authority."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:original-phase",
+      "target": "held",
+      "says": "Each action is selected from the original durable phase actually reread from the original owner outcome; the engine delegates every control effect and its preceding durable write to the accepted original maintenance operation."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:no-replay",
+      "target": "held",
+      "says": "After any unknown response the engine rereads the durable original phase before deciding the next action; it never issues another old restart after the original operation has written its restarting boundary."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:interruption",
+      "target": "held",
+      "says": "Explicitly requested interruption receiving uses only the accepted recover and receive-recovery transitions, preserves the exact original stopping archive and unknown-actor evidence, receives current source and cohorts, and carries forward still-owed persistent services and original listening endpoints."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:environment",
+      "target": "held",
+      "says": "Before any original application restoration the normal environment importer must receive the original native EnvironmentFile input and controller identity and reconstruct every original requested variable through hash readback; secret values enter no argument, log, source, backup or outcome."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:preservation",
+      "target": "held",
+      "says": "The continuation preserves the accepted original files, profile, input, process, cohort, alias, completed/transient invocation, held publisher and activation receiving invariants; it does not thaw or start the old publisher, replay an expired job or invent a separate ingress."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:bounded-receiving",
+      "target": "held",
+      "says": "Receiving waits are bounded by the checked caller's admitted duration and polling parameters and retain exact unresolved native effects; a deadline or nonzero child result does not declare the repair complete, release the deployment owner's pending obligation or authorize unchanged replay."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:zero-cash",
+      "target": "held",
+      "says": "The continuation purchases no capacity and expands no credential grant or provider use; fabrication may use the original admitted zero-cash inference supplier under its held quota and source confidentiality boundary without a paid fallback."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:source-and-storage",
+      "target": "held",
+      "says": "Requirement, specification, architecture, high-level and low-level design and code pass through their original house generation and receiving operations; qualified source objects and dependency closures are reused, and producers give preparation and outcome data an owned terminal disposition instead of allocating repeated source trees or installations."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:assays",
+      "target": "held",
+      "says": "Independent planned receiving exercises ordinary completion, interruption with a newly running cohort and still-owed inactive service/endpoint, unknown native restart response without a second restart, incomplete parameter or environment refusal, bounded pending receiving, and the real original-version isolated native manager through the same continuation."
+    },
+    {
+      "cell": "bounded-user-manager-maintenance-continuation:actual-done",
+      "target": "held",
+      "says": "Done requires integrated exact generated source, independent receiving, actual serialized manager recovery with useful original consumer operation, original WSL terminal quarantine completion and the original deployment receiver's useful fixed automatic publisher on the canonical registry; containment, a local document, a test count or a pull request alone is not completion."
+    }
+  ],
+  "x-provenance": {
+    "recorded-by": "Codex delegated publisher-quarantine-completion engineering service",
+    "method": "engineering-a-change-from-its-requirement",
+    "scope": "Only the remaining whole-window continuation is a new fabrication obligation; accepted original phase-machine and importer receiving is preserved.",
+    "authority": "Continuing explicit Leader registry-repair request; source proposals convey no runtime incumbency, provider entitlement or governing act.",
+    "original-authoring-carrier": {
+      "raisedBy": "Codex delegated engineering service: publisher-quarantine-completion",
+      "asks": [
+        "NO ACTUALLY FIX tHE REGISTRY SHIT THEN\n\nSTOP ROUTING AROUND DAMAGE YOU CAUSED AND ABANDONED: it just causes more damage.\n\nFIX THE DAMAGE",
+        "STOP PRESERVING BACKCOMPAT AND SHIMS\n\nTHIS IS EARLY ALPHA CODE\n\nFIND WORK THAT IS UNFINISHED AND FINISH IT, NOT BY RECONCILING BOTH DIRECTIONS BUT BY FINISHING THE WORK"
+      ],
+      "campaign": "https://github.com/561-group/561-group-services-section/issues/390",
+      "sha256": "af50bc6361cbb460c83a7ec0fa89deebe96f04c5ff57e0b3840bad5993564419"
+    },
+    "source-data-receiving": {
+      "at": "2026-10-29T00:01:12.728Z",
+      "correction": "Normalize actual own Requirement metadata to original governing Requirement contract: slug raiser and string asks. Preserve every original verbatim ask/displayraiser/carrier in provenance. Fourteen met-when conditions unchanged; canonical campaign home updated after rename.",
+      "state": "Awaiting actual governing Requirement schema receiving before downstream source rederivation",
+      "governingAdmission": false
+    }
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "identity": {
+    "version": "0.1.0",
+    "stability": "draft",
+    "status": "requires-independent-requirement-and-interpretation-admission",
+    "date-created": "2026-10-28",
+    "id": "bounded-user-manager-maintenance-continuation",
+    "title": "One original user-manager maintenance continuation within shared deployment custody",
+    "seat": "persistent-linux-machine-engineering-services-section",
+    "carrier": "specifications/bounded-user-manager-maintenance-continuation.md",
+    "authors": [
+      "Codex delegated publisher-quarantine-completion engineering service"
+    ],
+    "profile": "prose"
+  },
+  "whatThisIs": "An unadmitted candidate reading of Requirement bounded-user-manager-maintenance-continuation at ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg. External authority and specification acceptance remain open.",
+  "topics": [
+    {
+      "heading": "Source-owned requirement conditions",
+      "body": "{{clause:one-owner}}\n\n{{clause:parameters}}\n\n{{clause:whole-window}}\n\n{{clause:original-inputs}}\n\n{{clause:original-phase}}\n\n{{clause:no-replay}}\n\n{{clause:interruption}}\n\n{{clause:environment}}\n\n{{clause:preservation}}\n\n{{clause:bounded-receiving}}\n\n{{clause:zero-cash}}\n\n{{clause:source-and-storage}}\n\n{{clause:assays}}\n\n{{clause:actual-done}}",
+      "clauses": [
+        {
+          "id": "one-owner",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "The continuation engine is part of the existing persistent Linux machine engineering owner, composes its accepted maintenance and environment-import operations, and creates no competing manager, lock, journal, credential store or compatibility interface.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:one-owner"
+          ]
+        },
+        {
+          "id": "parameters",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "The engine receives its maintenance request, original environment-import request, interruption-receiving choice, polling interval, phase wait and overall duration bounds as checked parameters; hosts, units, providers, account names, paths and budgets are not hardcoded policy.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:parameters"
+          ]
+        },
+        {
+          "id": "whole-window",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "One native controller outside the affected user-manager subtree runs the original complete continuation so the deployment owner can retain its own genuine kernel and promotion custody across all phases and receive the original terminal outcome.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:whole-window"
+          ]
+        },
+        {
+          "id": "original-inputs",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "The executable boundary accepts only original source-bound maintenance and import parameter bytes whose identities and complete same-manager environment mappings are already covered by the maintenance inputs, without adding an authorization flag or accepting unknown actor authority.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:original-inputs"
+          ]
+        },
+        {
+          "id": "original-phase",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Each action is selected from the original durable phase actually reread from the original owner outcome; the engine delegates every control effect and its preceding durable write to the accepted original maintenance operation.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:original-phase"
+          ]
+        },
+        {
+          "id": "no-replay",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "After any unknown response the engine rereads the durable original phase before deciding the next action; it never issues another old restart after the original operation has written its restarting boundary.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:no-replay"
+          ]
+        },
+        {
+          "id": "interruption",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Explicitly requested interruption receiving uses only the accepted recover and receive-recovery transitions, preserves the exact original stopping archive and unknown-actor evidence, receives current source and cohorts, and carries forward still-owed persistent services and original listening endpoints.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:interruption"
+          ]
+        },
+        {
+          "id": "environment",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Before any original application restoration the normal environment importer must receive the original native EnvironmentFile input and controller identity and reconstruct every original requested variable through hash readback; secret values enter no argument, log, source, backup or outcome.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:environment"
+          ]
+        },
+        {
+          "id": "preservation",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "The continuation preserves the accepted original files, profile, input, process, cohort, alias, completed/transient invocation, held publisher and activation receiving invariants; it does not thaw or start the old publisher, replay an expired job or invent a separate ingress.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:preservation"
+          ]
+        },
+        {
+          "id": "bounded-receiving",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Receiving waits are bounded by the checked caller's admitted duration and polling parameters and retain exact unresolved native effects; a deadline or nonzero child result does not declare the repair complete, release the deployment owner's pending obligation or authorize unchanged replay.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:bounded-receiving"
+          ]
+        },
+        {
+          "id": "zero-cash",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "The continuation purchases no capacity and expands no credential grant or provider use; fabrication may use the original admitted zero-cash inference supplier under its held quota and source confidentiality boundary without a paid fallback.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:zero-cash"
+          ]
+        },
+        {
+          "id": "source-and-storage",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Requirement, specification, architecture, high-level and low-level design and code pass through their original house generation and receiving operations; qualified source objects and dependency closures are reused, and producers give preparation and outcome data an owned terminal disposition instead of allocating repeated source trees or installations.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:source-and-storage"
+          ]
+        },
+        {
+          "id": "assays",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Independent planned receiving exercises ordinary completion, interruption with a newly running cohort and still-owed inactive service/endpoint, unknown native restart response without a second restart, incomplete parameter or environment refusal, bounded pending receiving, and the real original-version isolated native manager through the same continuation.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:assays"
+          ]
+        },
+        {
+          "id": "actual-done",
+          "keyword": "MUST",
+          "actor": "The parameterized user-manager maintenance continuation engine",
+          "statement": "Done requires integrated exact generated source, independent receiving, actual serialized manager recovery with useful original consumer operation, original WSL terminal quarantine completion and the original deployment receiver's useful fixed automatic publisher on the canonical registry; containment, a local document, a test count or a pull request alone is not completion.",
+          "backedBy": [
+            "Original Requirement bounded-user-manager-maintenance-continuation (ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg), cell bounded-user-manager-maintenance-continuation:actual-done"
+          ]
+        }
+      ]
+    }
+  ],
+  "implementations": [],
+  "openQuestions": [
+    {
+      "question": "Has the original source Requirement and each BCP 14 interpretation been independently admitted?",
+      "blockedBy": "An original competent Office and external reviewer; no approval is inferred from this record"
+    }
+  ],
+  "laws": [],
+  "standards": [],
+  "provenance": {
+    "derivedAt": "2026-10-29T00:06:21.850Z",
+    "derivedBy": "Codex delegated engineering service; normative interpretation proposal, independent receiving owed",
+    "derivedFrom": [
+      "bounded-user-manager-maintenance-continuation@ni:///sha-256;gcEk4Xccn8nooJtYF059YUNmr1PlVVNH98ngBnddsxg"
+    ]
+  }
+}
