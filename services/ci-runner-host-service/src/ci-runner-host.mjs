@@ -417,5 +417,15 @@ export async function apply(record, { now = false, registrationRun=execFileSync,
 
 export async function observeExistingControls(record,{registrationRun=execFileSync,...ports}={}){
   const plan=await planExistingControls(record,{...ports,registration:r=>readRunnerRegistration(r,{run:registrationRun})});
-  return plan.units.map(unit=>({id:unit.name,status:unit.loaded&&plan.files.filter(file=>[unit.hook,unit.dropin].includes(file.path)).every(file=>file.current)?'current':'drift',detail:'original flat registration/pause received; startup condition and configured job hook received only when current; resident environment unchanged'}));
+  // CR-21 is a separate service-coverage obligation, not a synonym for
+  // successfully loading the startup and job-start controls. The resident
+  // Listener can process later jobs without another ExecCondition; the GitHub
+  // runner prepares action downloads before its JOB_STARTED hook. Do not
+  // report complete physical admission until an earlier per-job fence is
+  // independently received by this original owner.
+  return plan.units.flatMap(unit=>[
+    {id:unit.name,status:unit.loaded&&plan.files.filter(file=>[unit.hook,unit.dropin].includes(file.path)).every(file=>file.current)?'current':'drift',detail:'original flat registration/pause received; startup condition and configured job hook received only when current; resident environment unchanged'},
+    {id:`CR-21 ${unit.name} before-action-preparation admission`,status:'drift',
+      detail:'No source-attested per-job fence before PrepareActions; startup admission is not renewed across jobs and JOB_STARTED runs after action preparation. Frozen registration remains held; full physical job admission is unreceived.'},
+  ]);
 }
