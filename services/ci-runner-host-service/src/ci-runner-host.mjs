@@ -99,26 +99,47 @@ export function renderUnit(r) {
   ].join('\n');
 }
 
-/** The job-completed hook (CR-6, CR-7): temporary files and unretained workspaces go; caches and the runner's own folders stay. */
+/**
+ * The job-completed hook (CR-6, CR-7, CR-12): temporary files and unretained workspaces go; caches and the runner's
+ * own folders stay. With `retainRecentDays`, every workspace a job used within that many days is a cache too: the
+ * job's own workspace is marked used, the next job of its repository fetches only what it lacks instead of cloning
+ * again, and `maxBytes` evicts the least recently used. Removing every workspace after every job cloned and deleted
+ * a whole repository per push, which on a WSL host grows the Windows backing disk by whole virtual-disk blocks.
+ */
 export function renderHook(r) {
   const p = paths(r);
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+  const recentDays = Number(r.retainRecentDays ?? 0), maxKiB = r.maxBytes ? Math.floor(bytes(r.maxBytes) / 1024) : 0;
+  if (!Number.isInteger(recentDays) || recentDays < 0) throw new TypeError('retainRecentDays is a whole number of days');
   return [
     '#!/bin/bash',
-    '# Installed by ci-runner-host-service (CR-6, CR-7). Runs after every job; edit the parameter record, not this file.',
+    '# Installed by ci-runner-host-service (CR-6, CR-7, CR-12). Runs after every job; edit the parameter record, not this file.',
     `W=${q(p.work)}`,
     `retain=(${(r.retain ?? []).map(q).join(' ')})`,
+    `recentDays=${recentDays}`,
+    `maxKiB=${maxKiB}`,
     'find "$W/_temp" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null',
+    '# The finished job\'s workspace is the next job\'s cache for its repository.',
+    'case "${GITHUB_WORKSPACE:-}" in "$W"/[!_]*/*) [ -d "$GITHUB_WORKSPACE" ] && touch "$GITHUB_WORKSPACE" ;; esac',
+    'retained() { local k; for k in "${retain[@]}"; do [ "$k" = "$1" ] && return 0; done; return 1; }',
     'for top in "$W"/*/; do',
     '  t=$(basename "$top"); case "$t" in _*) continue ;; esac',
     '  kept=no',
     '  for child in "$top"*/; do',
     '    [ -d "$child" ] || continue',
     '    rel="$t/$(basename "$child")"; keep=no',
-    '    for k in "${retain[@]}"; do [ "$k" = "$rel" ] && keep=yes; done',
+    '    retained "$rel" && keep=yes',
+    '    if [ $keep = no ] && [ "$recentDays" -gt 0 ] && [ -n "$(find "$child" -maxdepth 0 -mtime -"$recentDays" 2>/dev/null)" ]; then keep=yes; fi',
     '    if [ $keep = yes ]; then kept=yes; else rm -rf "$child"; fi',
     '  done',
     '  [ $kept = yes ] || rm -rf "$top"',
+    'done',
+    '# Bounded: over maxBytes, the least recently used unretained workspace goes first.',
+    'while [ "$recentDays" -gt 0 ] && [ "$maxKiB" -gt 0 ] && [ "$(du -sk "$W" 2>/dev/null | cut -f1)" -gt "$maxKiB" ]; do',
+    '  oldest=""',
+    '  while read -r stamp rel; do retained "$rel" || { oldest=$rel; break; }; done < <(find "$W" -mindepth 2 -maxdepth 2 -type d -not -path "$W/_*" -printf \'%T@ %P\\n\' 2>/dev/null | sort -n)',
+    '  [ -n "$oldest" ] || break',
+    '  rm -rf "${W:?}/$oldest"; rmdir "$W/${oldest%%/*}" 2>/dev/null',
     'done',
     `find ${q(p.diag)} -type f -mtime +${Number(r.diagDays)} -delete 2>/dev/null`,
     'exit 0',
@@ -134,9 +155,10 @@ export function mergeEnv(text, key, value) {
   return `${lines.join('\n')}\n`;
 }
 
-/** Workspaces the hook would remove: everything under _work that is not runner-owned or retained. */
-export function workspacesToRemove(entries, retain) {
-  return entries.filter(({ top, child }) => !top.startsWith('_') && !retain.includes(`${top}/${child}`)).map(({ top, child }) => `${top}/${child}`);
+/** Workspaces the hook would remove: everything under _work that is not runner-owned, retained, or used within recentDays (CR-12). */
+export function workspacesToRemove(entries, retain, recentDays = 0, now = Date.now()) {
+  return entries.filter(({ top, child, mtimeMs }) => !top.startsWith('_') && !retain.includes(`${top}/${child}`)
+    && !(recentDays > 0 && Number.isFinite(mtimeMs) && now - mtimeMs < recentDays * 86400000)).map(({ top, child }) => `${top}/${child}`);
 }
 
 /** The smallest memory.max among a cgroup's ancestors, or null when none is set. */
@@ -171,7 +193,7 @@ function duBytes(p) {
 function workEntries(work) {
   if (!existsSync(work)) return [];
   return readdirSync(work, { withFileTypes: true }).filter((e) => e.isDirectory())
-    .flatMap((t) => (t.name.startsWith('_') ? [] : readdirSync(join(work, t.name), { withFileTypes: true }).filter((c) => c.isDirectory()).map((c) => ({ top: t.name, child: c.name }))));
+    .flatMap((t) => (t.name.startsWith('_') ? [] : readdirSync(join(work, t.name), { withFileTypes: true }).filter((c) => c.isDirectory()).map((c) => ({ top: t.name, child: c.name, mtimeMs: statSync(join(work, t.name, c.name)).mtimeMs }))));
 }
 const workerRunning = () => shOk('pgrep', ['-f', 'Runner.Worker']) !== '';
 
@@ -213,7 +235,7 @@ export function observe(record, options={}) {
           : `an ancestor caps memory at ${GB(ceiling)}, below this runner's ${r.memoryMax}: the host's memory budget decides`);
     const retained = (r.retain ?? []).reduce((s, k) => s + duBytes(join(p.work, k)), 0);
     const temp = duBytes(join(p.work, '_temp')), diag = duBytes(p.diag), total = duBytes(r.root);
-    const stray = workspacesToRemove(workEntries(p.work), r.retain ?? []);
+    const stray = workspacesToRemove(workEntries(p.work), r.retain ?? [], Number(r.retainRecentDays ?? 0));
     add(`CR-10 ${tag} disk`, total <= bytes(r.maxBytes) && stray.length === 0,
       `${GB(total)} of ${r.maxBytes}: retained ${GB(retained)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
     const jobs = shOk('journalctl', ['--user', '-u', unitName(r), '--since', '-24h', '--no-pager', '-o', 'cat']).split('\n')

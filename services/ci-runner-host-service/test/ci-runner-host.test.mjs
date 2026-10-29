@@ -53,6 +53,39 @@ test('the hook removes temp, stray workspaces and old diagnostics, and keeps cac
   assert.equal(existsSync(join(p.diag, 'new.log')), true);
 });
 
+test('recently used workspaces are caches, the finished job\'s is marked used, and maxBytes evicts the least recent (CR-12)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ci-recent-')), rr = { ...r, root, retain: [], retainRecentDays: 7, maxBytes: '64K' };
+  const p = paths(rr), age = (d, days) => { const t = Date.now() / 1000 - days * 86400; utimesSync(join(p.work, d), t, t); };
+  for (const d of ['_temp/job1', 'a/a', 'b/b', 'old/old', 'job/job']) mkdirSync(join(p.work, d), { recursive: true });
+  mkdirSync(p.diag, { recursive: true });
+  age('a/a', 1); age('b/b', 2); age('old/old', 30); age('job/job', 30);
+  writeFileSync(join(root, 'hook.sh'), renderHook(rr));
+  // the job that just finished ran in job/job: it is the newest cache, though its checkout is old
+  execFileSync('bash', [join(root, 'hook.sh')], { env: { ...process.env, GITHUB_WORKSPACE: join(p.work, 'job/job') } });
+  assert.equal(existsSync(join(p.work, '_temp/job1')), false);
+  assert.equal(existsSync(join(p.work, 'old')), false, 'unused for longer than retainRecentDays');
+  for (const d of ['a/a', 'b/b', 'job/job']) assert.equal(existsSync(join(p.work, d)), true, d);
+  // over maxBytes the least recently used goes first, the finished job's last
+  writeFileSync(join(p.work, 'a/a/blob'), Buffer.alloc(48 * 1024)); writeFileSync(join(p.work, 'b/b/blob'), Buffer.alloc(48 * 1024));
+  age('a/a', 1); age('b/b', 2);
+  execFileSync('bash', [join(root, 'hook.sh')], { env: { ...process.env, GITHUB_WORKSPACE: join(p.work, 'job/job') } });
+  assert.equal(existsSync(join(p.work, 'b')), false, 'least recently used evicted');
+  assert.equal(existsSync(join(p.work, 'job/job')), true);
+  // a workspace outside this runner's work folder is never touched
+  assert.throws(() => renderHook({ ...rr, retainRecentDays: -1 }), /whole number/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('without retainRecentDays the hook keeps only the declared caches, as before (CR-6)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ci-static-')), rr = { ...r, root }, p = paths(rr);
+  for (const d of ['r/r', 'x/x']) mkdirSync(join(p.work, d), { recursive: true });
+  mkdirSync(p.diag, { recursive: true });
+  writeFileSync(join(root, 'hook.sh'), renderHook(rr));
+  execFileSync('bash', [join(root, 'hook.sh')], { env: { ...process.env, GITHUB_WORKSPACE: join(p.work, 'x/x') } });
+  assert.equal(existsSync(join(p.work, 'x')), false); assert.equal(existsSync(join(p.work, 'r/r')), true);
+  rmSync(root, { recursive: true, force: true });
+});
+
 test('a symlinked bin is not the installed version; hard-linked real directories are (CR-3)', () => {
   const root = mkdtempSync(join(tmpdir(), 'cv-')), v = join(root, 'versions/1'), run = join(root, 'runner');
   for (const d of ['bin', 'externals']) mkdirSync(join(v, d), { recursive: true });
