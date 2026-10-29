@@ -55,6 +55,17 @@ test('controls-only original apply receives retained flat registration and prese
  assert.ok(!fs.existsSync(path.join(f.root,'runner'))&&!fs.existsSync(path.join(f.root,'versions')));
  assert.deepEqual(await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts}),[]);assert.equal(f.reloads,1);
 }));
+test('CR-21 pre-action-write coverage stays unreceived after successful startup-hook installation',run(async f=>{
+ const initial=await observe(f.record,{registrationRun:f.registrationRun,...f.controlsPorts});
+ assert.equal(initial.length,2);assert.equal(initial[0].status,'drift');assert.equal(initial[1].status,'drift');
+ await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts});
+ const after=await observe(f.record,{registrationRun:f.registrationRun,...f.controlsPorts});
+ assert.equal(after.length,2);assert.equal(after[0].status,'current','selected startup/job hooks are installed');
+ assert.match(after[1].id,/CR-21.*before-action-preparation/);
+ assert.equal(after[1].status,'drift','the pre-PrepareActions write interval remains unguarded');
+ assert.match(after[1].detail,/JOB_STARTED runs after action preparation/);
+ assert.equal(f.kernel.freeze,'1');assert.equal(f.reloads,1,'no additional runner lifecycle or admission');
+}));
 test('alternate organization scope binds same exact public registration without token acquisition',run(async f=>{
  f.runner.scope='https://github.com/another-group';const p=path.join(f.root,'.runner');const j=JSON.parse(fs.readFileSync(p));j.gitHubUrl=f.runner.scope;fs.writeFileSync(p,JSON.stringify(j));f.save();
  await apply(f.record,{registrationRun:f.registrationRun,controlsPorts:f.controlsPorts});assert.equal(f.reloads,1);
