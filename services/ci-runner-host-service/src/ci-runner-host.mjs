@@ -375,8 +375,9 @@ function link(r, log) {
 
 export async function apply(record, { now = false, registrationRun=execFileSync, controlsPorts } = {}) {
   if (record.controls?.mode === 'existing-flat') {
-    const result=await applyExistingControls(record,{...controlsPorts,registration:r=>readRunnerRegistration(r,{run:registrationRun})});
-    return result.writes.map(path=>`wrote ${path}`).concat(result.reloaded?['reloaded original user-unit controls; resident runners unchanged']:[]);
+    const result=applyExistingControls(record,controlsPorts);
+    return [...result.writes.map(path=>`wrote ${path}`),...(result.live??[]).map(unit=>`applied ceilings to running ${unit}`),
+      ...(result.pendingSlice??[]).map(unit=>`${unit} joins its slice at its next start`),...(result.unconverged??[]).map(unit=>`${unit} did not take its ceilings`)];
   }
   // Receive all pure/local/native registration identities before any growth or unit effect.
   for (const r of record.runners) {
@@ -415,7 +416,8 @@ export async function apply(record, { now = false, registrationRun=execFileSync,
   } finally { closeHostAdmission(admission); }
 }
 
-export async function observeExistingControls(record,{registrationRun=execFileSync,...ports}={}){
-  const plan=await planExistingControls(record,{...ports,registration:r=>readRunnerRegistration(r,{run:registrationRun})});
-  return plan.units.map(unit=>({id:unit.name,status:unit.loaded&&plan.files.filter(file=>[unit.hook,unit.dropin].includes(file.path)).every(file=>file.current)?'current':'drift',detail:'original flat registration/pause received; startup condition and configured job hook received only when current; resident environment unchanged'}));
+export function observeExistingControls(record,ports={}){
+  const plan=planExistingControls(record,ports);
+  return [...plan.files.map(f=>({id:f.path.split('/').slice(-2).join('/'),status:f.current?'current':'drift',detail:f.current?'rendered from the record':'differs from the record'})),
+    ...plan.units.map(u=>({id:u.name,status:u.live?'current':'drift',detail:`${u.active}; ceilings ${u.live?'applied':'not applied'}; ${u.inSlice?'in its slice':'not yet in its slice'} (MemoryMax ${u.have.MemoryMax})`}))];
 }
