@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, symlinkS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { bytes, renderUnit, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion } from '../src/ci-runner-host.mjs';
+import { bytes, renderUnit, renderSlice, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion } from '../src/ci-runner-host.mjs';
 
 const r = {
   name: 'box', scope: 'https://github.com/o/r', version: '2.0.0', root: '/srv/ci/box',
@@ -13,14 +13,14 @@ const r = {
 
 test('the unit yields by weight and nice, has one hard ceiling and never a soft one (CR-8, CR-9)', () => {
   const u = renderUnit(r);
-  for (const l of ['Slice=ci.slice', 'Nice=10', 'CPUWeight=20', 'IOWeight=20', 'MemoryMax=6G', 'WorkingDirectory=/srv/ci/box/runner', 'ExecStart=/srv/ci/box/runner/run.sh']) assert.ok(u.includes(`${l}\n`), l);
+  for (const l of ['Slice=ci.slice', 'Nice=10', 'CPUWeight=20', 'IOWeight=20', 'MemoryMax=6G', 'WorkingDirectory=/srv/ci/box', 'ExecStart=/srv/ci/box/bin/runsvc.sh']) assert.ok(u.includes(`${l}\n`), l);
   assert.doesNotMatch(u, /MemoryHigh/);
 });
 
 test('every path comes from the record (CR-2, CR-5)', () => {
   assert.deepEqual(paths(r), {
-    runner: '/srv/ci/box/runner', version: '/srv/ci/box/versions/2.0.0', hook: '/srv/ci/box/hooks/job-completed.sh',
-    work: '/srv/ci/box/runner/_work', diag: '/srv/ci/box/runner/_diag',
+    runner: '/srv/ci/box', version: '/srv/ci/versions/2.0.0', hook: '/srv/ci/hooks/box-job-completed.sh',
+    work: '/srv/ci/box/_work', diag: '/srv/ci/box/_diag',
   });
 });
 
@@ -103,4 +103,9 @@ test('a parent cap below the runner\'s ceiling is found (CR-9)', () => {
   assert.equal(ancestorCeiling('/user.slice/user-1000.slice/user@1000.service/ci.slice/ci-runner-box.service', (c) => max[c] ?? 'max'), 3221225472);
   assert.equal(ancestorCeiling('/a/b/c', () => 'max'), null);
   assert.equal(bytes('6G'), 6 * 1024 ** 3);
+});
+
+test('the shared slice carries the record\'s one hard ceiling and no swap (CR-8, CR-9)', () => {
+  const sl = renderSlice({ sliceMemoryMax: '4G' });
+  assert.ok(sl.includes('MemoryMax=4G\n')); assert.ok(sl.includes('MemorySwapMax=0\n')); assert.doesNotMatch(sl, /MemoryHigh/);
 });

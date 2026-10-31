@@ -8,9 +8,6 @@ import { join, dirname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { prepareHostAdmission, assertOperationAdmission, closeHostAdmission } from './host-admission.mjs';
-import { planExistingControls, applyExistingControls } from './existing-controls.mjs';
-export { observeHostAdmission, prepareHostAdmission, closeHostAdmission } from './host-admission.mjs';
 
 export const SCHEMA = 'ci-runner-host-parameters@1';
 const HOOK_KEY = 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED';
@@ -61,12 +58,11 @@ export function readRunnerRegistration(r,{run=execFileSync}={}){
 }
 
 /** Native config failures must never retain their token-bearing argv in an Error. */
-export function configureRunner(r,token,{run=execFileSync,admission}={}){
+export function configureRunner(r,token,{run=execFileSync}={}){
   if(typeof token!=='string'||!token||/[\r\n\0]/.test(token))throw new Error('registration supplier returned no single-use token');
-  assertOperationAdmission(admission,r);
   const p=paths(r);
   try{run(join(p.runner,'config.sh'),['--unattended','--url',r.scope,'--token',token,'--name',r.name,
-    '--labels',(r.labels??[]).join(','),'--work','_work','--disableupdate'],{cwd:p.runner,stdio:'ignore'});}
+    '--labels',(r.labels??[]).join(','),'--work','_work','--disableupdate','--replace'],{cwd:p.runner,stdio:'ignore'});}
   catch{throw new Error('native runner registration failed; token and native diagnostics withheld');}
 }
 
@@ -80,7 +76,9 @@ export function renderUnit(r) {
     '',
     '[Service]',
     `WorkingDirectory=${p.runner}`,
-    `ExecStart=${join(p.runner, 'run.sh')}`,
+    // GitHub's service entry point: it forwards SIGTERM to the listener, so a stop or restart never
+    // leaves a second listener holding the registration (run.sh does not forward it).
+    `ExecStart=${join(p.runner, 'bin', 'runsvc.sh')}`,
     'Restart=always',
     'RestartSec=15',
     'KillMode=process',
@@ -177,7 +175,7 @@ export function ancestorCeiling(cgroupPath, readMax) {
 export function loadRecord(path) {
   const rec = JSON.parse(readFileSync(path, 'utf8'));
   if (rec.schema !== SCHEMA) throw new Error(`${path}: schema is not ${SCHEMA}`);
-  return rec;
+  return { ...rec, runners: rec.runners.map((r) => ({ ...rec.defaults, ...r })) };
 }
 const text = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 const lst = (p) => { try { return lstatSync(p); } catch { return null; } };
@@ -195,10 +193,9 @@ function workEntries(work) {
   return readdirSync(work, { withFileTypes: true }).filter((e) => e.isDirectory())
     .flatMap((t) => (t.name.startsWith('_') ? [] : readdirSync(join(work, t.name), { withFileTypes: true }).filter((c) => c.isDirectory()).map((c) => ({ top: t.name, child: c.name, mtimeMs: statSync(join(work, t.name, c.name)).mtimeMs }))));
 }
-const workerRunning = () => shOk('pgrep', ['-f', 'Runner.Worker']) !== '';
+const workerRunning = (r) => shOk('pgrep', ['-f', join(paths(r).runner, 'bin', 'Runner.Worker')]) !== '';
 
 export function observe(record, options={}) {
-  if(record.controls?.mode==='existing-flat')return observeExistingControls(record,options);
   const items = [];
   const add = (id, ok, detail) => items.push({ id, status: ok ? 'current' : 'drift', detail });
   for (const r of record.runners) {
@@ -212,8 +209,6 @@ export function observe(record, options={}) {
     }
     const same = isVersion(p.runner, p.version);
     add(`CR-3 ${tag} version`, same, same ? `runs ${r.version} (hard links into ${p.version})` : `runner binaries are not the pinned ${r.version}`);
-    const old = r.adopt?.from && existsSync(join(r.adopt.from, '.runner'));
-    add(`CR-5 ${tag} one root`, !old, old ? `a registered runner still lives in ${r.adopt.from}` : r.root);
     const env = text(join(p.runner, '.env'));
     add(`CR-6 ${tag} job hook`, text(p.hook) === renderHook(r) && env.includes(`${HOOK_KEY}=${p.hook}\n`), p.hook);
     // Positive evidence of health, not "active": running (not cycling through restarts) and listening since its last start.
@@ -259,19 +254,19 @@ function listenerVersion(binDir) {
   return shOk(join(binDir, 'Runner.Listener'), ['--version']);
 }
 
-async function ensureVersion(r, log, admission) {
-  assertOperationAdmission(admission,r);
+async function ensureVersion(r, log) {
   const p = paths(r);
   if (existsSync(join(p.version, 'bin', 'Runner.Listener'))) return;
-  // Adoption: an adopted runner's own binaries of the pinned version become the version directory.
+  // A runner already holding the pinned version's binaries gives them to the version directory.
   const bin = join(p.runner, 'bin');
   if (lst(bin)?.isDirectory() && !lst(bin).isSymbolicLink() && listenerVersion(bin) === r.version) {
-    assertOperationAdmission(admission,r);
+    if (workerRunning(r)) { log.push(`${r.name}: taking its ${r.version} binaries deferred while its job runs`); return; }
+    shOk('systemctl', ['--user', 'stop', unitName(r)]);
     mkdirSync(p.version, { recursive: true });
     renameSync(bin, join(p.version, 'bin'));
     renameSync(join(p.runner, 'externals'), join(p.version, 'externals'));
     for (const s of SCRIPTS) if (existsSync(join(p.runner, s))) copyFileSync(join(p.runner, s), join(p.version, s));
-    log.push(`kept the adopted runner's ${r.version} binaries as ${p.version}`);
+    log.push(`kept ${r.name}'s ${r.version} binaries as ${p.version}`);
     return;
   }
   const tarball = tarballPath(r);
@@ -281,29 +276,13 @@ async function ensureVersion(r, log, admission) {
     if (!res.ok) throw new Error(`download ${url}: HTTP ${res.status}`);
     mkdirSync(dirname(tarball),{recursive:true});
     const archive=Buffer.from(await res.arrayBuffer());
-    assertOperationAdmission(admission,r);
     writeFileSync(tarball, archive);
   }
   const sum = createHash('sha256').update(readFileSync(tarball)).digest('hex');
   if (sum !== r.sha256) throw new Error(`${tarball}: sha256 ${sum} is not the record's ${r.sha256}`);
-  assertOperationAdmission(admission,r);
   mkdirSync(p.version, { recursive: true });
   execFileSync('tar', ['-xzf', tarball, '-C', p.version]);
   log.push(`installed runner ${r.version} into ${p.version} (sha256 verified)`);
-}
-
-function adopt(r, log, now) {
-  const p = paths(r);
-  if (existsSync(join(p.runner, '.runner')) || !r.adopt?.from || !existsSync(join(r.adopt.from, '.runner'))) return false;
-  if (workerRunning() && !now) { log.push(`not adopting ${r.adopt.from} yet: a job is running; apply --now to stop it (CR-12)`); return null; }
-  if (r.adopt.oldUnit) shOk('systemctl', ['--user', 'stop', r.adopt.oldUnit]);
-  for (let i = 0; i < 60 && workerRunning(); i++) execFileSync('sleep', ['1']);
-  if (workerRunning()) { log.push('the old runner\'s job did not stop within 60 s; not moving its directory'); return null; }
-  mkdirSync(r.root, { recursive: true });
-  renameSync(r.adopt.from, p.runner);
-  if (r.adopt.oldUnit) { shOk('systemctl', ['--user', 'disable', r.adopt.oldUnit]); log.push(`stopped and disabled ${r.adopt.oldUnit}`); }
-  log.push(`adopted the registered runner from ${r.adopt.from} into ${p.runner} (same filesystem rename; cache kept)`);
-  return true;
 }
 
 function assertRegistrationIdentity(r) {
@@ -336,15 +315,13 @@ function acquireRegistrationToken(r,invocation,run){
   }catch{throw Object.assign(new Error('runner registration token supplier failed; native diagnostics withheld'),{code:'runner-registration-token-unavailable'});}
 }
 
-export function registerRunner(r, log, {run=execFileSync,admission}={}) {
-  const p = paths(r);
+export function registerRunner(r, log, {run=execFileSync}={}) {
   if(r.registration)preflightRunnerRegistration(r,{run});
   if (assertRegistrationIdentity(r)) return;
-  if (!r.credentialCommand&&!r.registration) throw new Error(`[${r.name}] nothing to adopt and no registration supplier`);
-  assertOperationAdmission(admission,r);
+  if (!r.credentialCommand&&!r.registration) throw new Error(`[${r.name}] no registration supplier`);
   const invocation=r.registration?registrationInvocation(r,'POST'):null;
   const token = acquireRegistrationToken(r,invocation,run);
-  configureRunner(r,token,{admission});
+  configureRunner(r,token,{run});
   log.push(`registered ${r.name} with ${r.scope}`);
 }
 
@@ -361,7 +338,9 @@ export function isVersion(runnerDir, versionDir) {
 function link(r, log) {
   const p = paths(r);
   mkdirSync(p.runner, { recursive: true });
+  if (!existsSync(versionMarker(p.version))) return;
   if (!isVersion(p.runner, p.version)) {
+    if (workerRunning(r)) { log.push(`${r.name}: relinking deferred while its job runs`); return; }
     shOk('systemctl', ['--user', 'stop', unitName(r)]);
     for (const d of ['bin', 'externals']) {
       const at = join(p.runner, d);
@@ -373,51 +352,50 @@ function link(r, log) {
   for (const s of SCRIPTS) if (existsSync(join(p.version, s)) && !existsSync(join(p.runner, s))) copyFileSync(join(p.version, s), join(p.runner, s));
 }
 
-export async function apply(record, { now = false, registrationRun=execFileSync, controlsPorts } = {}) {
-  if (record.controls?.mode === 'existing-flat') {
-    const result=applyExistingControls(record,controlsPorts);
-    return [...result.writes.map(path=>`wrote ${path}`),...(result.live??[]).map(unit=>`applied ceilings to running ${unit}`),
-      ...(result.pendingSlice??[]).map(unit=>`${unit} joins its slice at its next start`),...(result.unconverged??[]).map(unit=>`${unit} did not take its ceilings`)];
-  }
-  // Receive all pure/local/native registration identities before any growth or unit effect.
+/** The slice every runner shares: one hard memory ceiling for all CI on the host (CR-8, CR-9). */
+export function renderSlice(record) {
+  return [
+    '[Unit]',
+    'Description=CI runners on this host, under one memory ceiling (ci-runner-host-service)',
+    '',
+    '[Slice]',
+    `MemoryMax=${record.sliceMemoryMax}`,
+    'MemorySwapMax=0',
+    '',
+  ].join('\n');
+}
+
+export async function apply(record, { registrationRun=execFileSync } = {}) {
+  // Every registration identity is checked before anything on the host changes.
   for (const r of record.runners) {
-    if(r.registration)registrationInvocation(r,'POST');
     assertRegistrationIdentity(r);
     if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
   }
-  const admission=await prepareHostAdmission(record,record.runners);
-  try {
   const log = [];
+  const slices = [...new Set(record.runners.map((r) => r.slice))];
+  let reload = false;
+  if (record.sliceMemoryMax) for (const s of slices) reload = writeIfChanged(join(unitDir(), s), renderSlice(record), log) || reload;
   for (const r of record.runners) {
-    if(r.registration)registrationInvocation(r,'POST');
-    assertRegistrationIdentity(r);
-    if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
     const p = paths(r);
-    assertOperationAdmission(admission,r);
-    const adopted = adopt(r, log, now);
-    if (adopted === null) continue;
-    await ensureVersion(r, log, admission);
-    assertOperationAdmission(admission,r);
+    await ensureVersion(r, log);
     link(r, log);
-    registerRunner(r, log,{run:registrationRun,admission});
+    registerRunner(r, log,{run:registrationRun});
     writeIfChanged(p.hook, renderHook(r), log, 0o755);
     const envPath = join(p.runner, '.env');
     writeIfChanged(envPath, mergeEnv(text(envPath), HOOK_KEY, p.hook), log);
-    const unitChanged = writeIfChanged(join(unitDir(), unitName(r)), renderUnit(r), log);
-    if (unitChanged) shOk('systemctl', ['--user', 'daemon-reload']);
+    const unitPath = join(unitDir(), unitName(r));
+    if (lst(unitPath)?.isSymbolicLink()) rmSync(unitPath);
+    let unitChanged = writeIfChanged(unitPath, renderUnit(r), log);
+    // Drop-ins from the retired controls-only mode; the unit now carries its own ceilings.
+    const dropIn = join(unitDir(), `${unitName(r)}.d`, '80-ci-runner-host-controls.conf');
+    if (existsSync(dropIn)) { rmSync(dropIn); log.push(`removed ${dropIn}`); unitChanged = true; }
+    if (unitChanged || reload) shOk('systemctl', ['--user', 'daemon-reload']);
     shOk('systemctl', ['--user', 'enable', unitName(r)]);
-    if (unitChanged || adopted || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
-      if (!workerRunning()) { shOk('systemctl', ['--user', 'restart', unitName(r)]); log.push(`started ${unitName(r)}`); }
-      else log.push(`${unitName(r)} changed; restart deferred while a job runs`);
+    if (unitChanged || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
+      if (!workerRunning(r)) { shOk('systemctl', ['--user', 'restart', unitName(r)]); log.push(`started ${unitName(r)}`); }
+      else log.push(`${unitName(r)} changed; restart deferred while its job runs`);
     }
-    if (!workerRunning()) { execFileSync('bash', [p.hook]); log.push('ran the job-completed hook once (idle)'); }
   }
   return log;
-  } finally { closeHostAdmission(admission); }
 }
 
-export function observeExistingControls(record,ports={}){
-  const plan=planExistingControls(record,ports);
-  return [...plan.files.map(f=>({id:f.path.split('/').slice(-2).join('/'),status:f.current?'current':'drift',detail:f.current?'rendered from the record':'differs from the record'})),
-    ...plan.units.map(u=>({id:u.name,status:u.live?'current':'drift',detail:`${u.active}; ceilings ${u.live?'applied':'not applied'}; ${u.inSlice?'in its slice':'not yet in its slice'} (MemoryMax ${u.have.MemoryMax})`}))];
-}
