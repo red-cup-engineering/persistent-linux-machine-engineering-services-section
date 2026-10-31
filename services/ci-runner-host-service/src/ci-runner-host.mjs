@@ -175,7 +175,7 @@ export function ancestorCeiling(cgroupPath, readMax) {
 export function loadRecord(path) {
   const rec = JSON.parse(readFileSync(path, 'utf8'));
   if (rec.schema !== SCHEMA) throw new Error(`${path}: schema is not ${SCHEMA}`);
-  return { ...rec, runners: rec.runners.map((r) => ({ ...rec.defaults, ...r })) };
+  return { ...rec, parametersPath: path, runners: rec.runners.map((r) => ({ ...rec.defaults, ...r })) };
 }
 const text = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 const lst = (p) => { try { return lstatSync(p); } catch { return null; } };
@@ -193,7 +193,9 @@ function workEntries(work) {
   return readdirSync(work, { withFileTypes: true }).filter((e) => e.isDirectory())
     .flatMap((t) => (t.name.startsWith('_') ? [] : readdirSync(join(work, t.name), { withFileTypes: true }).filter((c) => c.isDirectory()).map((c) => ({ top: t.name, child: c.name, mtimeMs: statSync(join(work, t.name, c.name)).mtimeMs }))));
 }
-const workerRunning = (r) => shOk('pgrep', ['-f', join(paths(r).runner, 'bin', 'Runner.Worker')]) !== '';
+const workers = (r) => shOk('pgrep', ['-f', join(paths(r).runner, 'bin', 'Runner.Worker')]).split('\n').filter(Boolean);
+const workerRunning = (r) => workers(r).length > 0;
+const elapsedSeconds = (pid) => Number(shOk('ps', ['-o', 'etimes=', '-p', pid])) || 0;
 
 export function observe(record, options={}) {
   const items = [];
@@ -365,6 +367,32 @@ export function renderSlice(record) {
   ].join('\n');
 }
 
+/**
+ * The host's reconcile timer: `apply` again on the record's calendar, so a record change, a relink deferred while a
+ * job ran, and the job time limit take effect with no one running the service by hand.
+ */
+export function renderReconcile(record, { node = process.execPath, cli } = {}) {
+  const q = (s) => `"${String(s).replace(/(["\\])/g, '\\$1')}"`;
+  return {
+    service: [
+      '[Unit]', `Description=Reconcile the CI runners of ${record.host} with their record (ci-runner-host-service)`, '',
+      '[Service]', 'Type=oneshot', `ExecStart=${q(node)} ${q(cli)} apply ${q(`--parameters=${record.parametersPath}`)}`,
+      'Nice=10', 'TimeoutStartSec=15min', '',
+    ].join('\n'),
+    timer: [
+      '[Unit]', `Description=Reconcile the CI runners of ${record.host} with their record`, '',
+      '[Timer]', `OnCalendar=${record.reconcile.calendar}`, 'RandomizedDelaySec=60', 'Persistent=true', '',
+      '[Install]', 'WantedBy=timers.target', '',
+    ].join('\n'),
+  };
+}
+
+/** Jobs past the record's time limit, as [runner, pid, seconds]; a hung job otherwise holds its runner for six hours. */
+export function overdueJobs(record, { list = workers, elapsed = elapsedSeconds } = {}) {
+  if (!record.jobMaxMinutes) return [];
+  return record.runners.flatMap((r) => list(r).map((pid) => [r, pid, elapsed(pid)])).filter(([, , t]) => t > record.jobMaxMinutes * 60);
+}
+
 export async function apply(record, { registrationRun=execFileSync } = {}) {
   // Every registration identity is checked before anything on the host changes.
   for (const r of record.runners) {
@@ -372,6 +400,18 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
   }
   const log = [];
+  for (const [r, pid, t] of overdueJobs(record)) {
+    shOk('kill', ['-TERM', pid]);
+    log.push(`${r.name}: stopped a job running ${Math.round(t / 60)} min, past the ${record.jobMaxMinutes} min limit`);
+  }
+  if (record.reconcile && record.parametersPath) {
+    const cli = new URL('../scripts/ci-runner-host.mjs', import.meta.url).pathname;
+    const units = renderReconcile(record, { cli });
+    const name = `ci-runner-host-reconcile`;
+    const changed = [writeIfChanged(join(unitDir(), `${name}.service`), units.service, log), writeIfChanged(join(unitDir(), `${name}.timer`), units.timer, log)].some(Boolean);
+    if (changed) shOk('systemctl', ['--user', 'daemon-reload']);
+    shOk('systemctl', ['--user', 'enable', '--now', `${name}.timer`]);
+  }
   const slices = [...new Set(record.runners.map((r) => r.slice))];
   let reload = false;
   if (record.sliceMemoryMax) for (const s of slices) reload = writeIfChanged(join(unitDir(), s), renderSlice(record), log) || reload;
