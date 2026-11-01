@@ -56,3 +56,23 @@ test('the job-completed release (killing the holder) frees the slot before the w
     for (const each of [first, second]) { each.worker.kill('SIGKILL'); await exited(each.worker); }
   } finally { rmSync(state, { recursive: true, force: true }); }
 });
+
+test('a pull request job completing dispatches the declared processor for its repository; other events do not (CR-29)', async () => {
+  const { renderHook } = await import('../src/ci-runner-host.mjs');
+  const state = mkdtempSync(join(tmpdir(), 'ci-dispatch-'));
+  try {
+    const calls = join(state, 'calls');
+    const gh = join(state, 'gh');
+    writeFileSync(gh, `#!/bin/bash\nprintf '%s|' "$@" >> '${calls}'; printf 'token=%s\\n' "\${GITHUB_TOKEN:-none}" >> '${calls}'\n`, { mode: 0o755 });
+    const r = { name: 'a', root: join(state, 'a'), version: '2.0.0', diagDays: 7, registration: { executable: gh },
+      pullRequestJobCompletedDispatch: { repository: 'o/runner', workflow: 'process-pull-requests.yml' } };
+    execFileSync('mkdir', ['-p', join(state, 'a', '_work', '_temp'), join(state, 'a', '_diag')]);
+    const hook = join(state, 'hook.sh');
+    writeFileSync(hook, renderHook(r), { mode: 0o755 });
+    for (const [event, repository] of [['pull_request', 'o/r'], ['push', 'o/r'], ['pull_request', 'bad repo']])
+      execFileSync('bash', [hook], { env: { ...process.env, GITHUB_EVENT_NAME: event, GITHUB_REPOSITORY: repository, GITHUB_TOKEN: 'job-token' } });
+    assert.equal(execFileSync('cat', [calls], { encoding: 'utf8' }), 'workflow|run|process-pull-requests.yml|-R|o/runner|-f|repository=o/r|token=none\n');
+    assert.doesNotMatch(renderHook({ ...r, pullRequestJobCompletedDispatch: undefined }), /workflow run/);
+    assert.throws(() => renderHook({ ...r, pullRequestJobCompletedDispatch: { repository: 'x', workflow: 'w.yml' } }), /owner\/name/);
+  } finally { rmSync(state, { recursive: true, force: true }); }
+});
