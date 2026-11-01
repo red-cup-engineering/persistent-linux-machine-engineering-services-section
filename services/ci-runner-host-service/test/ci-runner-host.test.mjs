@@ -129,3 +129,12 @@ test('the reconcile runs when its record changes, never on a calendar (CR-30)', 
   assert.equal('timer' in u, false);
   assert.doesNotMatch(u.service + u.path, /OnCalendar|OnUnitActiveSec/);
 });
+
+test('a runner whose process started before its unit or .env changed runs stale configuration (CR-32)', async () => {
+  const { staleConfiguration } = await import('../src/ci-runner-host.mjs');
+  assert.equal(staleConfiguration({ activeSince: 100, unitModified: 50, envModified: 150 }), true);
+  assert.equal(staleConfiguration({ activeSince: 100, unitModified: 150, envModified: 50 }), true);
+  assert.equal(staleConfiguration({ activeSince: 100, unitModified: 50, envModified: 90 }), false);
+  assert.equal(staleConfiguration({ activeSince: NaN, unitModified: 150, envModified: 150 }), false);
+  assert.equal(staleConfiguration({ activeSince: 100, unitModified: NaN, envModified: NaN }), false);
+});

@@ -437,6 +437,21 @@ export function renderSlice(record) {
   ].join('\n');
 }
 
+/**
+ * Whether a runner's process started before its unit or .env last changed, so it runs a configuration it has not read
+ * (CR-32). This is evidence from the files and the process, not "changed in this apply": a restart deferred by an
+ * earlier apply is still owed after that apply wrote the files.
+ */
+export function staleConfiguration({ activeSince, unitModified, envModified }) {
+  if (!Number.isFinite(activeSince)) return false;
+  return [unitModified, envModified].some((modified) => Number.isFinite(modified) && modified > activeSince);
+}
+const runsStaleConfiguration = (r, unitPath, envPath) => {
+  const since = shOk('systemctl', ['--user', 'show', unitName(r), '-p', 'ActiveEnterTimestamp', '--value']);
+  const mtime = (path) => { try { return statSync(path).mtimeMs; } catch { return NaN; } };
+  return staleConfiguration({ activeSince: since ? Date.parse(since.replace(/^\w+ /, '')) : NaN, unitModified: mtime(unitPath), envModified: mtime(envPath) });
+};
+
 export const RECONCILE_UNIT = 'ci-runner-host-reconcile';
 
 /**
@@ -505,7 +520,7 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     if (existsSync(dropIn)) { rmSync(dropIn); log.push(`removed ${dropIn}`); unitChanged = true; }
     if (unitChanged || reload) shOk('systemctl', ['--user', 'daemon-reload']);
     shOk('systemctl', ['--user', 'enable', unitName(r)]);
-    if (unitChanged || envChanged || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
+    if (unitChanged || envChanged || runsStaleConfiguration(r, unitPath, envPath) || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
       if (!workerRunning(r)) { shOk('systemctl', ['--user', 'restart', unitName(r)]); log.push(`started ${unitName(r)}`); }
       else { markReconcilePending(r); log.push(`${unitName(r)} changed; restart deferred while its job runs`); }
     }
