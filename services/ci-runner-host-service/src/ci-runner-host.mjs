@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 
 export const SCHEMA = 'ci-runner-host-parameters@1';
 const HOOK_KEY = 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED';
+const START_HOOK_KEY = 'ACTIONS_RUNNER_HOOK_JOB_STARTED';
 const RUNNER_OWNED = ['_tool', '_actions', '_PipelineMapping', '_temp'];
 const SCRIPTS = ['run.sh', 'config.sh', 'env.sh', 'run-helper.sh.template', 'run-helper.cmd.template', 'safe_sleep.sh', 'svc.sh'];
 
@@ -140,6 +141,31 @@ export function renderHook(r) {
     '  rm -rf "${W:?}/$oldest"; rmdir "$W/${oldest%%/*}" 2>/dev/null',
     'done',
     `find ${q(p.diag)} -type f -mtime +${Number(r.diagDays)} -delete 2>/dev/null`,
+    '# Release the host\'s CI job slot (CR-28) once this job\'s cleanup is done.',
+    `[ -f ${q(p.slotHolder)} ] && kill "$(cat ${q(p.slotHolder)})" 2>/dev/null; rm -f ${q(p.slotHolder)}`,
+    'exit 0',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The job-started hook (CR-28): the host runs one CI job at a time, whichever of its runners took it, so the runners
+ * registered for several organizations never run jobs concurrently. The job waits here, blocked in the kernel on an
+ * exclusive lock of the host's one slot file: no polling and no timer. The lock then passes to a holder process that
+ * lives exactly as long as the job's worker (the hook's parent): it ends when the worker exits, when the job-completed
+ * hook ends it, or in the runner's own orphan-process cleanup, so a crashed or cancelled job cannot keep the slot.
+ */
+export function renderStartHook(r) {
+  const p = paths(r);
+  const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+  return [
+    '#!/bin/bash',
+    '# Installed by ci-runner-host-service (CR-28). Runs before every job; edit the parameter record, not this file.',
+    `mkdir -p ${q(dirname(p.slotHolder))}`,
+    `exec 9>>${q(p.slot)}`,
+    'flock -x 9',
+    'tail --pid="$PPID" -f /dev/null &',
+    `echo $! > ${q(p.slotHolder)}`,
     'exit 0',
     '',
   ].join('\n');
@@ -240,6 +266,7 @@ export function observe(record, options={}) {
     add(`CR-3 ${tag} version`, same, same ? `runs ${r.version} (hard links into ${p.version})` : `runner binaries are not the pinned ${r.version}`);
     const env = text(join(p.runner, '.env'));
     add(`CR-6 ${tag} job hook`, text(p.hook) === renderHook(r) && env.includes(`${HOOK_KEY}=${p.hook}\n`), p.hook);
+    add(`CR-28 ${tag} one job at a time on the host`, text(p.startHook) === renderStartHook(r) && env.includes(`${START_HOOK_KEY}=${p.startHook}\n`), p.startHook);
     // Positive evidence of health, not "active": running (not cycling through restarts) and listening since its last start.
     const unitFile = text(join(unitDir(), unitName(r)));
     const show = Object.fromEntries(shOk('systemctl', ['--user', 'show', unitName(r), '-p', 'SubState', '-p', 'NRestarts', '-p', 'ActiveEnterTimestamp'])
@@ -448,7 +475,9 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     registerRunner(r, log,{run:registrationRun});
     writeIfChanged(p.hook, renderHook(r), log, 0o755);
     const envPath = join(p.runner, '.env');
-    writeIfChanged(envPath, mergeEnv(text(envPath), HOOK_KEY, p.hook), log);
+    writeIfChanged(p.startHook, renderStartHook(r), log, 0o755);
+    // The runner reads .env only when it starts: a changed .env needs a restart (deferred while a job runs).
+    const envChanged = writeIfChanged(envPath, mergeEnv(mergeEnv(text(envPath), HOOK_KEY, p.hook), START_HOOK_KEY, p.startHook), log);
     const unitPath = join(unitDir(), unitName(r));
     if (lst(unitPath)?.isSymbolicLink()) rmSync(unitPath);
     let unitChanged = writeIfChanged(unitPath, renderUnit(r), log);
@@ -457,7 +486,7 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     if (existsSync(dropIn)) { rmSync(dropIn); log.push(`removed ${dropIn}`); unitChanged = true; }
     if (unitChanged || reload) shOk('systemctl', ['--user', 'daemon-reload']);
     shOk('systemctl', ['--user', 'enable', unitName(r)]);
-    if (unitChanged || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
+    if (unitChanged || envChanged || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
       if (!workerRunning(r)) { shOk('systemctl', ['--user', 'restart', unitName(r)]); log.push(`started ${unitName(r)}`); }
       else log.push(`${unitName(r)} changed; restart deferred while its job runs`);
     }

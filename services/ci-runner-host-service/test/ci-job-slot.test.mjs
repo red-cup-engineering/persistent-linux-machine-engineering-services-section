@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { renderStartHook, paths } from '../src/ci-runner-host.mjs';
+
+// Two runners of one host, as the record declares them: sibling roots under one state directory.
+function host() {
+  const state = mkdtempSync(join(tmpdir(), 'ci-job-slot-'));
+  const runners = ['a', 'b'].map((name) => ({ name, root: join(state, name), version: '2.0.0' }));
+  execFileSync('mkdir', ['-p', join(state, 'hooks')]);
+  for (const r of runners) writeFileSync(paths(r).startHook, renderStartHook(r), { mode: 0o755 });
+  return { state, runners };
+}
+// A stand-in job worker: runs the job-started hook as the runner does (the worker is the hook's parent), then
+// "works" until killed, and reports when its hook let it start.
+function job(r) {
+  const worker = spawn('bash', ['-c', `bash ${paths(r).startHook}; echo started; exec sleep 600`], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const started = new Promise((resolve) => worker.stdout.on('data', (chunk) => { if (String(chunk).includes('started')) resolve(Date.now()); }));
+  return { worker, started };
+}
+const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const exited = (worker) => new Promise((resolve) => worker.once('exit', resolve));
+
+test('the host runs one job at a time: a second runner\'s job starts only after the first job\'s worker exits', async () => {
+  const { state, runners: [a, b] } = host();
+  try {
+    const first = job(a);
+    await first.started;
+    const second = job(b);
+    let secondStarted = false;
+    second.started.then(() => { secondStarted = true; });
+    await settle(1500);
+    assert.equal(secondStarted, false, 'the second job must wait while the first holds the slot');
+    const endedAt = Date.now();
+    first.worker.kill('SIGKILL');
+    await exited(first.worker);
+    const at = await second.started;
+    assert.ok(at >= endedAt, 'the second job started after the first worker ended');
+    second.worker.kill('SIGKILL');
+    await exited(second.worker);
+  } finally { rmSync(state, { recursive: true, force: true }); }
+});
+
+test('the job-completed release (killing the holder) frees the slot before the worker exits', async () => {
+  const { state, runners: [a, b] } = host();
+  try {
+    const first = job(a);
+    await first.started;
+    assert.ok(existsSync(paths(a).slotHolder));
+    const second = job(b);
+    execFileSync('bash', ['-c', `kill "$(cat '${paths(a).slotHolder}')"; rm -f '${paths(a).slotHolder}'`]);
+    await second.started;
+    for (const each of [first, second]) { each.worker.kill('SIGKILL'); await exited(each.worker); }
+  } finally { rmSync(state, { recursive: true, force: true }); }
+});
