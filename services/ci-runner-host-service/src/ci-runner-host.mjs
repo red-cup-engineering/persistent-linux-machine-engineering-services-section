@@ -110,6 +110,19 @@ export function renderHook(r) {
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const recentDays = Number(r.retainRecentDays ?? 0), maxKiB = r.maxBytes ? Math.floor(bytes(r.maxBytes) / 1024) : 0;
   if (!Number.isInteger(recentDays) || recentDays < 0) throw new TypeError('retainRecentDays is a whole number of days');
+  // CR-29: a pull request's CI job completing is the event a pull-request processor waits on (its checks are now
+  // known), so the hook dispatches the declared workflow for the job's repository. Nothing polls for it.
+  const dispatch = r.pullRequestJobCompletedDispatch;
+  const SLUG = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  if (dispatch !== undefined && (!SLUG.test(dispatch?.repository ?? '') || !/^[A-Za-z0-9_.-]+\.ya?ml$/.test(dispatch?.workflow ?? '')
+      || typeof r.registration?.executable !== 'string' || !isAbsolute(r.registration.executable)))
+    throw new TypeError('pullRequestJobCompletedDispatch names an owner/name repository and a workflow file, and the record an absolute gh');
+  const dispatchLines = dispatch === undefined ? [] : [
+    '# A pull request\'s CI job completed: dispatch the pull-request processor for its repository (CR-29).',
+    'case "${GITHUB_EVENT_NAME:-}" in pull_request|pull_request_target)',
+    `  [[ "\${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && env -u GH_TOKEN -u GITHUB_TOKEN ${q(r.registration.executable)} workflow run ${q(dispatch.workflow)} -R ${q(dispatch.repository)} -f repository="$GITHUB_REPOSITORY" >/dev/null 2>&1 ;;`,
+    'esac',
+  ];
   return [
     '#!/bin/bash',
     '# Installed by ci-runner-host-service (CR-6, CR-7, CR-12). Runs after every job; edit the parameter record, not this file.',
@@ -141,6 +154,7 @@ export function renderHook(r) {
     '  rm -rf "${W:?}/$oldest"; rmdir "$W/${oldest%%/*}" 2>/dev/null',
     'done',
     `find ${q(p.diag)} -type f -mtime +${Number(r.diagDays)} -delete 2>/dev/null`,
+    ...dispatchLines,
     '# Release the host\'s CI job slot (CR-28) once this job\'s cleanup is done.',
     `[ -f ${q(p.slotHolder)} ] && kill "$(cat ${q(p.slotHolder)})" 2>/dev/null; rm -f ${q(p.slotHolder)}`,
     'exit 0',
