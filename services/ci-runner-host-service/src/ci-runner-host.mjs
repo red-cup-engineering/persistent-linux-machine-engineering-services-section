@@ -155,6 +155,8 @@ export function renderHook(r) {
     'done',
     `find ${q(p.diag)} -type f -mtime +${Number(r.diagDays)} -delete 2>/dev/null`,
     ...dispatchLines,
+    '# A change apply deferred while a job ran is reconciled once this job\'s worker exits (CR-31): the exit is the event.',
+    `if [ -e ${q(p.reconcilePending)} ]; then (unset RUNNER_TRACKING_ID; setsid bash -c 'tail --pid="$1" -f /dev/null; systemctl --user start --no-block ${RECONCILE_UNIT}.service' _ "$PPID" </dev/null >/dev/null 2>&1 &); fi`,
     '# Release the host\'s CI job slot (CR-28) once this job\'s cleanup is done.',
     `[ -f ${q(p.slotHolder)} ] && kill "$(cat ${q(p.slotHolder)})" 2>/dev/null; rm -f ${q(p.slotHolder)}`,
     'exit 0',
@@ -262,7 +264,8 @@ function workEntries(work) {
 }
 const workers = (r) => shOk('pgrep', ['-f', join(paths(r).runner, 'bin', 'Runner.Worker')]).split('\n').filter(Boolean);
 const workerRunning = (r) => workers(r).length > 0;
-const elapsedSeconds = (pid) => Number(shOk('ps', ['-o', 'etimes=', '-p', pid])) || 0;
+/** Record that apply deferred a change while a job ran (CR-31): the job-completed hook reconciles after that job. */
+const markReconcilePending = (r) => writeFileSync(paths(r).reconcilePending, `${new Date().toISOString()} ${r.name}\n`);
 
 export function observe(record, options={}) {
   const items = [];
@@ -329,7 +332,7 @@ async function ensureVersion(r, log) {
   // A runner already holding the pinned version's binaries gives them to the version directory.
   const bin = join(p.runner, 'bin');
   if (lst(bin)?.isDirectory() && !lst(bin).isSymbolicLink() && listenerVersion(bin) === r.version) {
-    if (workerRunning(r)) { log.push(`${r.name}: taking its ${r.version} binaries deferred while its job runs`); return; }
+    if (workerRunning(r)) { markReconcilePending(r); log.push(`${r.name}: taking its ${r.version} binaries deferred while its job runs`); return; }
     shOk('systemctl', ['--user', 'stop', unitName(r)]);
     mkdirSync(p.version, { recursive: true });
     renameSync(bin, join(p.version, 'bin'));
@@ -409,7 +412,7 @@ function link(r, log) {
   mkdirSync(p.runner, { recursive: true });
   if (!existsSync(versionMarker(p.version))) return;
   if (!isVersion(p.runner, p.version)) {
-    if (workerRunning(r)) { log.push(`${r.name}: relinking deferred while its job runs`); return; }
+    if (workerRunning(r)) { markReconcilePending(r); log.push(`${r.name}: relinking deferred while its job runs`); return; }
     shOk('systemctl', ['--user', 'stop', unitName(r)]);
     for (const d of ['bin', 'externals']) {
       const at = join(p.runner, d);
@@ -434,9 +437,13 @@ export function renderSlice(record) {
   ].join('\n');
 }
 
+export const RECONCILE_UNIT = 'ci-runner-host-reconcile';
+
 /**
- * The host's reconcile timer: `apply` again on the record's calendar, so a record change, a relink deferred while a
- * job ran, and the job time limit take effect with no one running the service by hand.
+ * The host's reconcile units (CR-30, CR-31): `apply` runs when something happens, never on a clock. The path unit
+ * starts it when the parameter record changes; the job-completed hook starts it after a job during which apply had to
+ * defer a change (CR-31). A hung job ends at its workflow's own timeout-minutes, which frees its runner and the host's
+ * job slot; nothing here kills a job for its age.
  */
 export function renderReconcile(record, { node = process.execPath, cli } = {}) {
   const q = (s) => `"${String(s).replace(/(["\\])/g, '\\$1')}"`;
@@ -446,18 +453,12 @@ export function renderReconcile(record, { node = process.execPath, cli } = {}) {
       '[Service]', 'Type=oneshot', `ExecStart=${q(node)} ${q(cli)} apply ${q(`--parameters=${record.parametersPath}`)}`,
       'Nice=10', 'TimeoutStartSec=15min', '',
     ].join('\n'),
-    timer: [
-      '[Unit]', `Description=Reconcile the CI runners of ${record.host} with their record`, '',
-      '[Timer]', `OnCalendar=${record.reconcile.calendar}`, 'RandomizedDelaySec=60', 'Persistent=true', '',
-      '[Install]', 'WantedBy=timers.target', '',
+    path: [
+      '[Unit]', `Description=Reconcile the CI runners of ${record.host} when their record changes`, '',
+      '[Path]', `PathChanged=${record.parametersPath}`, `Unit=${RECONCILE_UNIT}.service`, '',
+      '[Install]', 'WantedBy=default.target', '',
     ].join('\n'),
   };
-}
-
-/** Jobs past the record's time limit, as [runner, pid, seconds]; a hung job otherwise holds its runner for six hours. */
-export function overdueJobs(record, { list = workers, elapsed = elapsedSeconds } = {}) {
-  if (!record.jobMaxMinutes) return [];
-  return record.runners.flatMap((r) => list(r).map((pid) => [r, pid, elapsed(pid)])).filter(([, , t]) => t > record.jobMaxMinutes * 60);
 }
 
 export async function apply(record, { registrationRun=execFileSync } = {}) {
@@ -467,17 +468,21 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     if(r.registration)preflightRunnerRegistration(r,{run:registrationRun});
   }
   const log = [];
-  for (const [r, pid, t] of overdueJobs(record)) {
-    shOk('kill', ['-TERM', pid]);
-    log.push(`${r.name}: stopped a job running ${Math.round(t / 60)} min, past the ${record.jobMaxMinutes} min limit`);
-  }
+  // This apply is the reconcile a deferral asked for; a change it must defer again marks it pending again.
+  for (const r of record.runners) rmSync(paths(r).reconcilePending, { force: true });
   if (record.reconcile && record.parametersPath) {
     const cli = new URL('../scripts/ci-runner-host.mjs', import.meta.url).pathname;
     const units = renderReconcile(record, { cli });
-    const name = `ci-runner-host-reconcile`;
-    const changed = [writeIfChanged(join(unitDir(), `${name}.service`), units.service, log), writeIfChanged(join(unitDir(), `${name}.timer`), units.timer, log)].some(Boolean);
+    const timer = join(unitDir(), `${RECONCILE_UNIT}.timer`);
+    if (existsSync(timer)) {
+      shOk('systemctl', ['--user', 'disable', '--now', `${RECONCILE_UNIT}.timer`]);
+      rmSync(timer);
+      log.push(`removed ${timer}: the reconcile runs on events, not a calendar`);
+    }
+    const changed = [writeIfChanged(join(unitDir(), `${RECONCILE_UNIT}.service`), units.service, log),
+      writeIfChanged(join(unitDir(), `${RECONCILE_UNIT}.path`), units.path, log)].some(Boolean);
     if (changed) shOk('systemctl', ['--user', 'daemon-reload']);
-    shOk('systemctl', ['--user', 'enable', '--now', `${name}.timer`]);
+    shOk('systemctl', ['--user', 'enable', '--now', `${RECONCILE_UNIT}.path`]);
   }
   const slices = [...new Set(record.runners.map((r) => r.slice))];
   let reload = false;
@@ -502,7 +507,7 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     shOk('systemctl', ['--user', 'enable', unitName(r)]);
     if (unitChanged || envChanged || shOk('systemctl', ['--user', 'is-active', unitName(r)]) !== 'active') {
       if (!workerRunning(r)) { shOk('systemctl', ['--user', 'restart', unitName(r)]); log.push(`started ${unitName(r)}`); }
-      else log.push(`${unitName(r)} changed; restart deferred while its job runs`);
+      else { markReconcilePending(r); log.push(`${unitName(r)} changed; restart deferred while its job runs`); }
     }
   }
   return log;
