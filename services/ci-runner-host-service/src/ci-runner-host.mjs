@@ -188,6 +188,33 @@ function duBytes(p) {
   if (!existsSync(p)) return 0;
   try { return Number(sh('ionice', ['-c3', 'nice', '-n19', 'du', '-sxb', p]).split(/\s/)[0]); } catch { return 0; }
 }
+/**
+ * Whether a recorded disk measurement is recent enough to read instead of walking the tree again. Walking every
+ * runner with du on each 15-minute reconcile took longer than the interval and held the host's disk at 99% io
+ * pressure (2026-11-01), so a runner is measured at most once per `hours`.
+ */
+export function diskMeasurementIsCurrent(measurement, nowMs, hours) {
+  const at = Date.parse(measurement?.measuredAt ?? '');
+  return Number.isFinite(at) && nowMs - at < hours * 3600e3 && Number.isFinite(measurement.total);
+}
+
+/** The runner's disk use, from its record beside the runner when current, otherwise measured once and recorded. */
+function measuredDisk(r, p) {
+  const file = join(r.root, 'disk-usage.json');
+  let recorded = null;
+  try { recorded = JSON.parse(readFileSync(file, 'utf8')); } catch { recorded = null; }
+  if (diskMeasurementIsCurrent(recorded, Date.now(), Number(r.diskMeasureHours ?? 24))) return recorded;
+  const measured = {
+    measuredAt: new Date().toISOString(),
+    total: duBytes(r.root),
+    retained: (r.retain ?? []).reduce((s, k) => s + duBytes(join(p.work, k)), 0),
+    temp: duBytes(join(p.work, '_temp')),
+    diag: duBytes(p.diag),
+  };
+  try { writeFileSync(file, `${JSON.stringify(measured)}\n`); } catch { /* an unwritable record is measured again next time */ }
+  return measured;
+}
+
 function workEntries(work) {
   if (!existsSync(work)) return [];
   return readdirSync(work, { withFileTypes: true }).filter((e) => e.isDirectory())
@@ -230,11 +257,10 @@ export function observe(record, options={}) {
       ceiling === null ? 'no ancestor cap'
         : ceiling >= bytes(r.memoryMax) ? `nearest ancestor cap ${GB(ceiling)} is above this runner's ${r.memoryMax}`
           : `an ancestor caps memory at ${GB(ceiling)}, below this runner's ${r.memoryMax}: the host's memory budget decides`);
-    const retained = (r.retain ?? []).reduce((s, k) => s + duBytes(join(p.work, k)), 0);
-    const temp = duBytes(join(p.work, '_temp')), diag = duBytes(p.diag), total = duBytes(r.root);
+    const { total, retained, temp, diag, measuredAt } = measuredDisk(r, p);
     const stray = workspacesToRemove(workEntries(p.work), r.retain ?? [], Number(r.retainRecentDays ?? 0));
     add(`CR-10 ${tag} disk`, total <= bytes(r.maxBytes) && stray.length === 0,
-      `${GB(total)} of ${r.maxBytes}: retained ${GB(retained)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
+      `${GB(total)} of ${r.maxBytes} (measured ${measuredAt}): retained ${GB(retained)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
     const jobs = shOk('journalctl', ['--user', '-u', unitName(r), '--since', '-24h', '--no-pager', '-o', 'cat']).split('\n')
       .map((l) => /Job (\S+) \/ \S+ completed with result: (\w+)/.exec(l)).filter(Boolean)
       .reduce((m, [, job, res]) => { m[`${job} ${res}`] = (m[`${job} ${res}`] ?? 0) + 1; return m; }, {});

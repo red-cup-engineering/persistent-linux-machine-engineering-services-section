@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, symlinkS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { bytes, renderUnit, renderSlice, renderReconcile, overdueJobs, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion } from '../src/ci-runner-host.mjs';
+import { bytes, renderUnit, renderSlice, renderReconcile, overdueJobs, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion, diskMeasurementIsCurrent } from '../src/ci-runner-host.mjs';
 
 const r = {
   name: 'box', scope: 'https://github.com/o/r', version: '2.0.0', root: '/srv/ci/box',
@@ -121,4 +121,13 @@ test('only jobs past the record\'s time limit are overdue, and none without a li
   const list = (r) => (r.name === 'a' ? ['1', '2'] : ['3']), elapsed = (pid) => ({ 1: 30 * 60, 2: 61 * 60, 3: 3 * 3600 })[pid];
   assert.deepEqual(overdueJobs(record, { list, elapsed }).map(([r, pid]) => `${r.name}:${pid}`), ['a:2', 'b:3']);
   assert.deepEqual(overdueJobs({ ...record, jobMaxMinutes: undefined }, { list, elapsed }), []);
+});
+
+test('a disk measurement is read from its record until it is older than the measuring interval', () => {
+  const now = Date.parse('2026-11-01T12:00:00Z');
+  assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-11-01T01:00:00Z', total: 5 }, now, 24), true);
+  assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-10-31T11:00:00Z', total: 5 }, now, 24), false);
+  assert.equal(diskMeasurementIsCurrent({ measuredAt: 'not a date', total: 5 }, now, 24), false);
+  assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-11-01T01:00:00Z' }, now, 24), false);
+  assert.equal(diskMeasurementIsCurrent(null, now, 24), false);
 });
