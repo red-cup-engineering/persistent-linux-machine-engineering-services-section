@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, symlinkS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { bytes, renderUnit, renderSlice, renderReconcile, overdueJobs, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion, diskMeasurementIsCurrent } from '../src/ci-runner-host.mjs';
+import { bytes, renderUnit, renderSlice, renderReconcile, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion, diskMeasurementIsCurrent } from '../src/ci-runner-host.mjs';
 
 const r = {
   name: 'box', scope: 'https://github.com/o/r', version: '2.0.0', root: '/srv/ci/box',
@@ -21,7 +21,7 @@ test('every path comes from the record (CR-2, CR-5)', () => {
   assert.deepEqual(paths(r), {
     runner: '/srv/ci/box', version: '/srv/ci/versions/2.0.0', hook: '/srv/ci/hooks/box-job-completed.sh',
     work: '/srv/ci/box/_work', diag: '/srv/ci/box/_diag', startHook: '/srv/ci/hooks/box-job-started.sh',
-    slot: '/srv/ci/ci-job-slot.lock', slotHolder: '/srv/ci/ci-job-slot/box.pid',
+    slot: '/srv/ci/ci-job-slot.lock', slotHolder: '/srv/ci/ci-job-slot/box.pid', reconcilePending: '/srv/ci/reconcile-pending',
   });
 });
 
@@ -111,18 +111,6 @@ test('the shared slice carries the record\'s one hard ceiling and no swap (CR-8,
   assert.ok(sl.includes('MemoryMax=4G\n')); assert.ok(sl.includes('MemorySwapMax=0\n')); assert.doesNotMatch(sl, /MemoryHigh/);
 });
 
-test('the reconcile timer applies the record again on its calendar', () => {
-  const u = renderReconcile({ host: 'box', parametersPath: '/r/ci.json', reconcile: { calendar: '*:0/15' } }, { node: '/bin/node', cli: '/s/ci-runner-host.mjs' });
-  assert.ok(u.service.includes('ExecStart="/bin/node" "/s/ci-runner-host.mjs" apply "--parameters=/r/ci.json"\n'));
-  assert.ok(u.timer.includes('OnCalendar=*:0/15\n'));
-});
-
-test('only jobs past the record\'s time limit are overdue, and none without a limit', () => {
-  const record = { jobMaxMinutes: 60, runners: [{ name: 'a' }, { name: 'b' }] };
-  const list = (r) => (r.name === 'a' ? ['1', '2'] : ['3']), elapsed = (pid) => ({ 1: 30 * 60, 2: 61 * 60, 3: 3 * 3600 })[pid];
-  assert.deepEqual(overdueJobs(record, { list, elapsed }).map(([r, pid]) => `${r.name}:${pid}`), ['a:2', 'b:3']);
-  assert.deepEqual(overdueJobs({ ...record, jobMaxMinutes: undefined }, { list, elapsed }), []);
-});
 
 test('a disk measurement is read from its record until it is older than the measuring interval', () => {
   const now = Date.parse('2026-11-01T12:00:00Z');
@@ -131,4 +119,13 @@ test('a disk measurement is read from its record until it is older than the meas
   assert.equal(diskMeasurementIsCurrent({ measuredAt: 'not a date', total: 5 }, now, 24), false);
   assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-11-01T01:00:00Z' }, now, 24), false);
   assert.equal(diskMeasurementIsCurrent(null, now, 24), false);
+});
+
+test('the reconcile runs when its record changes, never on a calendar (CR-30)', () => {
+  const u = renderReconcile({ host: 'box', parametersPath: '/r/ci.json', reconcile: true }, { node: '/bin/node', cli: '/s/ci-runner-host.mjs' });
+  assert.ok(u.service.includes('ExecStart="/bin/node" "/s/ci-runner-host.mjs" apply "--parameters=/r/ci.json"\n'));
+  assert.ok(u.path.includes('PathChanged=/r/ci.json\n'));
+  assert.ok(u.path.includes('Unit=ci-runner-host-reconcile.service\n'));
+  assert.equal('timer' in u, false);
+  assert.doesNotMatch(u.service + u.path, /OnCalendar|OnUnitActiveSec/);
 });

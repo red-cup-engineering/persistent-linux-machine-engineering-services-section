@@ -9,5 +9,7 @@ export const paths = r => ({
   // CR-28: every runner of the host shares one job slot; each runner's holder records the process keeping it.
   startHook: join(dirname(r.root), 'hooks', `${r.name}-job-started.sh`),
   slot: join(dirname(r.root), 'ci-job-slot.lock'), slotHolder: join(dirname(r.root), 'ci-job-slot', `${r.name}.pid`),
+  // CR-31: present while a change apply deferred because a job ran; the job-completed hook reconciles once it is gone.
+  reconcilePending: join(dirname(r.root), 'reconcile-pending'),
 });
 export const tarballPath = r => r.tarball ?? join(tmpdir(),`actions-runner-linux-x64-${r.version}.tar.gz`);

@@ -76,3 +76,25 @@ test('a pull request job completing dispatches the declared processor for its re
     assert.throws(() => renderHook({ ...r, pullRequestJobCompletedDispatch: { repository: 'x', workflow: 'w.yml' } }), /owner\/name/);
   } finally { rmSync(state, { recursive: true, force: true }); }
 });
+
+test('a change deferred during a job is reconciled once that job\'s worker exits, and only then (CR-31)', async () => {
+  const { renderHook } = await import('../src/ci-runner-host.mjs');
+  const state = mkdtempSync(join(tmpdir(), 'ci-reconcile-'));
+  try {
+    const bin = join(state, 'bin'), calls = join(state, 'calls');
+    execFileSync('mkdir', ['-p', bin, join(state, 'a', '_work', '_temp'), join(state, 'a', '_diag')]);
+    writeFileSync(join(bin, 'systemctl'), `#!/bin/bash\nprintf '%s\\n' "$*" >> '${calls}'\n`, { mode: 0o755 });
+    const r = { name: 'a', root: join(state, 'a'), version: '2.0.0', diagDays: 7 };
+    const hook = join(state, 'hook.sh');
+    writeFileSync(hook, renderHook(r), { mode: 0o755 });
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+    const run = () => spawn('bash', ['-c', `bash ${hook}; exec sleep 600`], { env, stdio: 'ignore' });
+    const quiet = run(); await settle(800); quiet.kill('SIGKILL'); await exited(quiet); await settle(1500);
+    assert.equal(existsSync(calls), false, 'no change pending: nothing is started');
+    writeFileSync(paths(r).reconcilePending, 'pending\n');
+    const worker = run(); await settle(1500);
+    assert.equal(existsSync(calls), false, 'not while the job\'s worker still runs');
+    worker.kill('SIGKILL'); await exited(worker); await settle(2500);
+    assert.equal(execFileSync('cat', [calls], { encoding: 'utf8' }), '--user start --no-block ci-runner-host-reconcile.service\n');
+  } finally { rmSync(state, { recursive: true, force: true }); }
+});
