@@ -6,5 +6,8 @@ export const unitName = r => `ci-runner-${r.name}.service`;
 export const paths = r => ({
   runner: r.root, version: join(dirname(r.root), 'versions', r.version),
   hook: join(dirname(r.root), 'hooks', `${r.name}-job-completed.sh`), work: join(r.root, '_work'), diag: join(r.root, '_diag'),
+  // CR-28: every runner of the host shares one job slot; each runner's holder records the process keeping it.
+  startHook: join(dirname(r.root), 'hooks', `${r.name}-job-started.sh`),
+  slot: join(dirname(r.root), 'ci-job-slot.lock'), slotHolder: join(dirname(r.root), 'ci-job-slot', `${r.name}.pid`),
 });
 export const tarballPath = r => r.tarball ?? join(tmpdir(),`actions-runner-linux-x64-${r.version}.tar.gz`);

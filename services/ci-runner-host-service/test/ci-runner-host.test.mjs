@@ -20,7 +20,8 @@ test('the unit yields by weight and nice, has one hard ceiling and never a soft 
 test('every path comes from the record (CR-2, CR-5)', () => {
   assert.deepEqual(paths(r), {
     runner: '/srv/ci/box', version: '/srv/ci/versions/2.0.0', hook: '/srv/ci/hooks/box-job-completed.sh',
-    work: '/srv/ci/box/_work', diag: '/srv/ci/box/_diag',
+    work: '/srv/ci/box/_work', diag: '/srv/ci/box/_diag', startHook: '/srv/ci/hooks/box-job-started.sh',
+    slot: '/srv/ci/ci-job-slot.lock', slotHolder: '/srv/ci/ci-job-slot/box.pid',
   });
 });
 
