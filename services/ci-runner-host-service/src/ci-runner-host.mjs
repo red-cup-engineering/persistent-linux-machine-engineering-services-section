@@ -174,14 +174,38 @@ export function renderHook(r) {
 export function renderStartHook(r) {
   const p = paths(r);
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+  const cancel = r.cancelSupersededJobs;
+  if (cancel !== undefined && (typeof cancel?.jq !== 'string' || !isAbsolute(cancel.jq)
+      || typeof r.registration?.executable !== 'string' || !isAbsolute(r.registration.executable)))
+    throw new TypeError('cancelSupersededJobs names an absolute jq, and the record an absolute gh');
+  // CR-33: a job whose commit is no longer current when it takes the slot is cancelled instead of run: the branch
+  // moved on, or the pull request's head changed or it closed. Only definite evidence cancels; an unreadable answer runs
+  // the job. This is cancel-in-progress for every repository at once, with no workflow edited.
+  const supersededLines = cancel === undefined ? [] : [
+    `gh=${q(r.registration.executable)}; jq=${q(cancel.jq)}; mine=""; current=""`,
+    'api() { env -u GH_TOKEN -u GITHUB_TOKEN "$gh" api "$@" 2>/dev/null; }',
+    'case "${GITHUB_EVENT_NAME:-}" in',
+    '  pull_request|pull_request_target)',
+    '    number=$("$jq" -r \'.pull_request.number // empty\' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null)',
+    '    mine=$("$jq" -r \'.pull_request.head.sha // empty\' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null)',
+    '    [[ "$number" =~ ^[0-9]+$ ]] && current=$(api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq \'if .state == "open" then .head.sha else "closed" end\') ;;',
+    '  push)',
+    '    case "${GITHUB_REF:-}" in refs/heads/*) mine=${GITHUB_SHA:-}; current=$(api "repos/$GITHUB_REPOSITORY/commits/${GITHUB_REF#refs/heads/}" --jq .sha) ;; esac ;;',
+    'esac',
+    'if [[ "$mine" =~ ^[0-9a-f]{40}$ ]] && [[ "$current" =~ ^([0-9a-f]{40}|closed)$ ]] && [ "$current" != "$mine" ] \\',
+    '    && [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && [[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ ]]; then',
+    '  env -u GH_TOKEN -u GITHUB_TOKEN "$gh" run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1',
+    'fi',
+  ];
   return [
     '#!/bin/bash',
-    '# Installed by ci-runner-host-service (CR-28). Runs before every job; edit the parameter record, not this file.',
+    '# Installed by ci-runner-host-service (CR-28, CR-33). Runs before every job; edit the parameter record, not this file.',
     `mkdir -p ${q(dirname(p.slotHolder))}`,
     `exec 9>>${q(p.slot)}`,
     'flock -x 9',
     'tail --pid="$PPID" -f /dev/null &',
     `echo $! > ${q(p.slotHolder)}`,
+    ...supersededLines,
     'exit 0',
     '',
   ].join('\n');

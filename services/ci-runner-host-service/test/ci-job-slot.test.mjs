@@ -98,3 +98,40 @@ test('a change deferred during a job is reconciled once that job\'s worker exits
     assert.equal(execFileSync('cat', [calls], { encoding: 'utf8' }), '--user start --no-block ci-runner-host-reconcile.service\n');
   } finally { rmSync(state, { recursive: true, force: true }); }
 });
+
+test('a job whose commit is no longer current when it takes the slot is cancelled; a current or unreadable one runs (CR-33)', async () => {
+  const state = mkdtempSync(join(tmpdir(), 'ci-superseded-'));
+  try {
+    const calls = join(state, 'calls'), gh = join(state, 'gh');
+    // A fake gh: answers the pull request and branch reads from files, records every cancel.
+    writeFileSync(gh, `#!/bin/bash
+if [ "$1" = run ] && [ "$2" = cancel ]; then printf 'cancel %s %s\\n' "$3" "$5" >> '${calls}'; exit 0; fi
+case "$2" in */pulls/*) cat '${state}/pull' 2>/dev/null || exit 1 ;; */commits/*) cat '${state}/branch' 2>/dev/null || exit 1 ;; esac
+`, { mode: 0o755 });
+    const r = { name: 'a', root: join(state, 'a'), version: '2.0.0', registration: { executable: gh }, cancelSupersededJobs: { jq: '/usr/bin/jq' } };
+    execFileSync('mkdir', ['-p', join(state, 'hooks')]);
+    writeFileSync(paths(r).startHook, renderStartHook(r), { mode: 0o755 });
+    const event = join(state, 'event.json');
+    const old = 'a'.repeat(40), newer = 'b'.repeat(40);
+    // The stand-in worker is its own process ("; true" keeps bash from exec-ing the hook), so the slot frees when it exits.
+    const runHook = (env) => execFileSync('bash', ['-c', `bash ${paths(r).startHook}; true`], { stdio: 'ignore', env: { ...process.env, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '42', GITHUB_EVENT_PATH: event, GH_TOKEN: 'job', ...env } });
+    const cancels = () => (existsSync(calls) ? execFileSync('cat', [calls], { encoding: 'utf8' }) : '');
+    writeFileSync(event, JSON.stringify({ pull_request: { number: 7, head: { sha: old } } }));
+    writeFileSync(join(state, 'pull'), `${old}\n`); runHook({ GITHUB_EVENT_NAME: 'pull_request' });
+    assert.equal(cancels(), '', 'current head: runs');
+    writeFileSync(join(state, 'pull'), `${newer}\n`); runHook({ GITHUB_EVENT_NAME: 'pull_request' });
+    assert.equal(cancels(), 'cancel 42 o/r\n', 'head moved: cancelled');
+    writeFileSync(join(state, 'pull'), 'closed\n'); runHook({ GITHUB_EVENT_NAME: 'pull_request' });
+    assert.equal(cancels(), 'cancel 42 o/r\ncancel 42 o/r\n', 'closed: cancelled');
+    rmSync(join(state, 'pull')); runHook({ GITHUB_EVENT_NAME: 'pull_request' });
+    assert.equal(cancels().split('\n').length - 1, 2, 'unreadable: runs');
+    writeFileSync(join(state, 'branch'), `${old}\n`); runHook({ GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: old });
+    assert.equal(cancels().split('\n').length - 1, 2, 'branch still at this commit: runs');
+    writeFileSync(join(state, 'branch'), `${newer}\n`); runHook({ GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: old });
+    assert.equal(cancels().split('\n').length - 1, 3, 'branch moved on: cancelled');
+    assert.doesNotMatch(renderStartHook({ ...r, cancelSupersededJobs: undefined }), /run cancel/);
+  } finally {
+    for (const pid of execFileSync('bash', ['-c', `cat '${state}'/ci-job-slot/*.pid 2>/dev/null || true`], { encoding: 'utf8' }).split('\n').filter(Boolean)) { try { process.kill(Number(pid)); } catch {} }
+    rmSync(state, { recursive: true, force: true });
+  }
+});
