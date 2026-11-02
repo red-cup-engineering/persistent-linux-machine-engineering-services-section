@@ -499,10 +499,13 @@ function ensureRelease(reconcile, log) {
     git('sparse-checkout', 'set', '--no-cone', '/services/ci-runner-host-service/');
     log.push(`cloned the service release into ${root}`);
   }
-  if (git('status', '--porcelain', '--untracked-files=no')) throw new Error(`${root} holds local changes; the release is not overwritten`);
+  // A fresh --no-checkout clone has no index yet (status would list every file as deleted), and its HEAD may already
+  // name the commit: only a populated checkout is checked for local changes, and an empty one is always checked out.
+  const checkedOut = git('ls-files') !== '';
+  if (checkedOut && git('status', '--porcelain', '--untracked-files=no')) throw new Error(`${root} holds local changes; the release is not overwritten`);
   let head = '';
   try { head = git('rev-parse', 'HEAD'); } catch { /* no commit checked out yet */ }
-  if (head !== commit) {
+  if (head !== commit || !checkedOut) {
     try { git('cat-file', '-e', `${commit}^{commit}`); } catch { git('fetch', '--quiet', '--filter=blob:none', 'origin', commit); }
     git('checkout', '--quiet', '--detach', commit);
     log.push(`release ${root} now at ${commit}`);
