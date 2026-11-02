@@ -135,3 +135,40 @@ case "$2" in */pulls/*) cat '${state}/pull' 2>/dev/null || exit 1 ;; */commits/*
     rmSync(state, { recursive: true, force: true });
   }
 });
+
+test('a push run that repeats its open pull request\'s run of the same commit is cancelled; the PR run never is (CR-35)', async () => {
+  const state = mkdtempSync(join(tmpdir(), 'ci-duplicate-'));
+  try {
+    const calls = join(state, 'calls'), gh = join(state, 'gh');
+    writeFileSync(gh, `#!/bin/bash
+if [ "$1" = run ] && [ "$2" = cancel ]; then printf 'cancel %s\\n' "$3" >> '${calls}'; exit 0; fi
+case "$2" in
+  repos/o/r) cat '${state}/default' ;;
+  repos/o/r/pulls\\?*) cat '${state}/open-head' ;;
+  repos/o/r/contents/*) base64 -w0 '${state}/workflow.yml' ;;
+  repos/o/r/commits/*) cat '${state}/branch' ;;
+  *) exit 1 ;;
+esac
+`, { mode: 0o755 });
+    const r = { name: 'a', root: join(state, 'a'), version: '2.0.0', registration: { executable: gh }, cancelSupersededJobs: { jq: '/usr/bin/jq' } };
+    execFileSync('mkdir', ['-p', join(state, 'hooks')]);
+    writeFileSync(paths(r).startHook, renderStartHook(r), { mode: 0o755 });
+    const sha = 'a'.repeat(40);
+    writeFileSync(join(state, 'default'), 'main\n'); writeFileSync(join(state, 'branch'), `${sha}\n`);
+    const push = (ref, env = {}) => execFileSync('bash', ['-c', `bash ${paths(r).startHook}; true`], { stdio: 'ignore', env: { ...process.env,
+      GITHUB_EVENT_NAME: 'push', GITHUB_REF: ref, GITHUB_SHA: sha, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '9',
+      GITHUB_WORKFLOW_REF: `o/r/.github/workflows/ci.yml@${ref}`, ...env } });
+    const count = () => (existsSync(calls) ? execFileSync('cat', [calls], { encoding: 'utf8' }).split('\n').length - 1 : 0);
+    writeFileSync(join(state, 'open-head'), `${sha}\n`);
+    writeFileSync(join(state, 'workflow.yml'), 'on:\n  push:\n  pull_request:\n    branches: [main]\n');
+    push('refs/heads/work'); assert.equal(count(), 1, 'duplicate of the PR run: cancelled');
+    writeFileSync(join(state, 'workflow.yml'), 'on: [push, pull_request]\n');
+    push('refs/heads/work'); assert.equal(count(), 2, 'list form: cancelled');
+    writeFileSync(join(state, 'workflow.yml'), 'on:\n  push:\n  workflow_dispatch:\n');
+    push('refs/heads/work'); assert.equal(count(), 2, 'the workflow has no PR run: runs');
+    writeFileSync(join(state, 'workflow.yml'), 'on:\n  push:\n  pull_request:\n');
+    push('refs/heads/main'); assert.equal(count(), 2, 'the default branch: runs');
+    writeFileSync(join(state, 'open-head'), `${'b'.repeat(40)}\n`);
+    push('refs/heads/work'); assert.equal(count(), 2, 'the PR head is another commit: runs');
+  } finally { rmSync(state, { recursive: true, force: true }); }
+});
