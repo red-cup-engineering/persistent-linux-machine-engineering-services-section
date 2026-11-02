@@ -15,23 +15,23 @@ test('wrong host, credentials, mutable paths or methods refuse before supplier c
 test('a nonexistent declared archive stays in original owner custody',()=>{
  assert.equal(tarballPath(runner),'/owner/data/logs/runner.tgz');
 });
-test('unadmitted native config cannot expose a token-bearing command or execute it',()=>{
+test('a failing native config never exposes the token-bearing command',()=>{
  const token='fixture-registration-token';let calls=0;
- assert.throws(()=>configureRunner({...runner,root:'/owner/data/state/runner'},token,{run:()=>{calls++;throw Error('native failed with '+token);}}),error=>!error.message.includes(token)&&!error.cause&&/issued original host admission/.test(error.message));
- assert.equal(calls,0);
+ assert.throws(()=>configureRunner({...runner,root:'/owner/data/state/runner'},token,{run:()=>{calls++;throw Error('native failed with '+token);}}),error=>!error.message.includes(token)&&!error.cause&&/token and native diagnostics withheld/.test(error.message));
+ assert.equal(calls,1);
 });
 test('foreign local registration refuses before downloading, linking or unit effects',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-registration-'));
  try{
-  fs.mkdirSync(path.join(root,'runner'));fs.writeFileSync(path.join(root,'runner/.runner'),JSON.stringify({agentName:runner.name,gitHubUrl:'https://github.com/other/scope'}));
+  fs.writeFileSync(path.join(root,'.runner'),JSON.stringify({agentName:runner.name,gitHubUrl:'https://github.com/other/scope'}));
   await assert.rejects(()=>apply({runners:[{...runner,root}]}),/identity differs/);
-  assert.deepEqual(fs.readdirSync(root),['runner']);assert.deepEqual(fs.readdirSync(path.join(root,'runner')),['.runner']);
+  assert.deepEqual(fs.readdirSync(root),['.runner']);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 const native={id:42,name:runner.name,status:'online',busy:false,labels:[{name:'self-hosted'},{name:'Linux'},{name:'X64'},{name:'bare-cedar-fog'}]};
 test('unavailable, ambiguous and existing remote names refuse before new download or registration',async()=>{
  for(const response of [null,{total_count:2,runners:[native]}, {total_count:1,runners:[native]}]){
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-admission-'));let calls=0;
+  const root=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'runner-admission-')),'box');fs.mkdirSync(root);let calls=0;
   try{
    await assert.rejects(()=>apply({runners:[{...runner,root}]},{registrationRun:(_exe,args)=>{
     calls++;assert.ok(args.includes('GET'));assert.ok(!args.includes('POST'));
@@ -45,7 +45,7 @@ test('unavailable, ambiguous and existing remote names refuse before new downloa
 test('retained local id must match the actual native remote id before any materialization',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-retained-'));
  try{
-  fs.mkdirSync(path.join(root,'runner'));const file=path.join(root,'runner/.runner');
+  const file=path.join(root,'.runner');
   fs.writeFileSync(file,JSON.stringify({agentName:runner.name,gitHubUrl:runner.scope,agentId:41}));
   const read=()=>JSON.stringify({total_count:1,runners:[native]});
   assert.throws(()=>preflightRunnerRegistration({...runner,root},{run:read}),/identity is unreceived/);
@@ -53,14 +53,14 @@ test('retained local id must match the actual native remote id before any materi
   assert.equal(preflightRunnerRegistration({...runner,root},{run:read}).local.id,42);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
-test('unadmitted token supplier is never called beyond original read-only metadata',()=>{
+test('a failing token supplier surfaces no token or native diagnostics',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-token-'));let called=0;
  try{
   assert.throws(()=>registerRunner({...runner,root},[],{run:(_exe,args)=>{
    called++;if(args.includes('GET'))return JSON.stringify({total_count:0,runners:[]});
    throw Object.assign(Error('fixture-secret-token'),{stdout:'fixture-secret-token',stderr:'fixture-secret-token'});
-  }}),error=>/issued original host admission/.test(error.message)&&!JSON.stringify(error).includes('fixture-secret-token')&&!error.message.includes('fixture-secret-token')&&!error.cause&&!error.stdout&&!error.stderr);
-  assert.equal(called,1);assert.deepEqual(fs.readdirSync(root),[]);
+  }}),error=>/token supplier failed/.test(error.message)&&!JSON.stringify(error).includes('fixture-secret-token')&&!error.message.includes('fixture-secret-token')&&!error.cause&&!error.stdout&&!error.stderr);
+  assert.equal(called,2);assert.deepEqual(fs.readdirSync(root),[]);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('actual API id, online state and labels receive the resource',()=>{

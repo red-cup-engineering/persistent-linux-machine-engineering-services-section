@@ -26,7 +26,7 @@ Each requirement has one shall. Identifiers are stable.
 
 ## Placement and lifecycle
 
-- CR-5. The service shall keep everything a runner owns (versions, registration, work folder, diagnostics) under one root directory selected by the host owner's record within that section's data tree and apart from other tools' files.
+- CR-5. The service shall keep everything a runner owns (registration, work folder, diagnostics) in its root directory, the GitHub Actions runner directory itself, and the versions and hooks it shares with the host's other runners beside those roots, all in one directory selected by the host owner's record and apart from other tools' files.
 - CR-6. The service shall keep the work folder bounded. After every job, through the runner's job-completed hook, it shall remove the job's temporary files and every workspace not named in the record's `retain` list. Retained workspaces are caches that make the next job cheaper.
 - CR-7. The service shall delete runner diagnostic logs older than the record's retention days.
 - CR-12. When the record declares `retainRecentDays`, the service shall keep as a cache every workspace a job used within that many days, mark the finished job's workspace used, and keep the work folder within `maxBytes` by removing the least recently used unretained workspace first. A repository's next job then fetches only what it lacks instead of cloning again (rule host-storage-reclaims-itself); cloning and deleting a whole repository per push grew Bare Cedar Fog's Windows backing disk by whole virtual-disk blocks (2026-10-29).
