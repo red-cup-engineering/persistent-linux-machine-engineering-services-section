@@ -521,8 +521,9 @@ function ensureRelease(reconcile, log) {
     try { git('cat-file', '-e', `${commit}^{commit}`); } catch { git('fetch', '--quiet', '--filter=blob:none', 'origin', commit); }
     git('checkout', '--quiet', '--detach', commit);
     log.push(`release ${root} now at ${commit}`);
+    return { cli, installed: true };
   }
-  return cli;
+  return { cli, installed: false };
 }
 
 export const RECONCILE_UNIT = 'ci-runner-host-reconcile';
@@ -561,7 +562,15 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
   if (record.reconcile && record.parametersPath) {
     // CR-34: the reconcile runs the service's installed release, never whichever copy ran this apply (a temporary
     // clone that was then removed left the unit pointing at nothing, 2026-11-01).
-    const cli = ensureRelease(record.reconcile, log);
+    const { cli, installed } = ensureRelease(record.reconcile, log);
+    if (installed) {
+      // The code running this apply predates the release it just installed: hand the rest of the reconcile to the new
+      // release, so its hooks and units are what the host gets (the install is the event; the next apply finds the
+      // release current and does not hand over again).
+      execFileSync(process.execPath, [cli, 'apply', `--parameters=${record.parametersPath}`], { stdio: 'inherit' });
+      log.push(`handed the reconcile to the release at ${record.reconcile.commit}`);
+      return log;
+    }
     const units = renderReconcile(record, { cli });
     const timer = join(unitDir(), `${RECONCILE_UNIT}.timer`);
     if (existsSync(timer)) {
