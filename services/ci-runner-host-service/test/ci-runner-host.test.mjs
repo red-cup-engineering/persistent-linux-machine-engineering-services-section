@@ -138,3 +138,11 @@ test('a runner whose process started before its unit or .env changed runs stale 
   assert.equal(staleConfiguration({ activeSince: NaN, unitModified: 150, envModified: 150 }), false);
   assert.equal(staleConfiguration({ activeSince: 100, unitModified: NaN, envModified: NaN }), false);
 });
+
+test('the reconcile runs the declared release, never the copy that ran apply (CR-34)', async () => {
+  const { releasePlan } = await import('../src/ci-runner-host.mjs');
+  const reconcile = { source: 'https://github.com/o/service.git', commit: 'c'.repeat(40), root: '/state/ci-runner-host-service-release' };
+  assert.equal(releasePlan(reconcile).cli, '/state/ci-runner-host-service-release/services/ci-runner-host-service/scripts/ci-runner-host.mjs');
+  for (const bad of [true, {}, { ...reconcile, commit: 'main' }, { ...reconcile, root: 'relative' }, { ...reconcile, source: 'file:///tmp/x' }])
+    assert.throws(() => releasePlan(bad), /reconcile names/);
+});

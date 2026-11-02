@@ -476,6 +476,40 @@ const runsStaleConfiguration = (r, unitPath, envPath) => {
   return staleConfiguration({ activeSince: since ? Date.parse(since.replace(/^\w+ /, '')) : NaN, unitModified: mtime(unitPath), envModified: mtime(envPath) });
 };
 
+/**
+ * The service's installed release (CR-34): `reconcile` names its source repository, an exact commit and a root
+ * directory. The root holds a sparse, blobless checkout of only this service at that commit, kept current by apply;
+ * the reconcile unit runs the CLI found there. Upgrading the service is changing the commit in the record, and that
+ * change is itself the event (CR-30) on which the reconcile installs the new release. A root holding local changes is
+ * never overwritten. Returns the absolute path of the release's CLI.
+ */
+export function releasePlan(reconcile) {
+  const { source, commit, root } = reconcile ?? {};
+  if (typeof source !== 'string' || !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(source)
+      || typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit) || typeof root !== 'string' || !isAbsolute(root))
+    throw new TypeError('reconcile names the source repository (https://github.com/owner/name.git), an exact 40-hex commit and an absolute root');
+  return { source, commit, root, cli: join(root, 'services', 'ci-runner-host-service', 'scripts', 'ci-runner-host.mjs') };
+}
+function ensureRelease(reconcile, log) {
+  const { source, commit, root, cli } = releasePlan(reconcile);
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  if (!existsSync(join(root, '.git'))) {
+    mkdirSync(root, { recursive: true });
+    execFileSync('git', ['clone', '--quiet', '--filter=blob:none', '--no-checkout', source, root], { stdio: ['ignore', 'ignore', 'pipe'] });
+    git('sparse-checkout', 'set', '--no-cone', '/services/ci-runner-host-service/');
+    log.push(`cloned the service release into ${root}`);
+  }
+  if (git('status', '--porcelain', '--untracked-files=no')) throw new Error(`${root} holds local changes; the release is not overwritten`);
+  let head = '';
+  try { head = git('rev-parse', 'HEAD'); } catch { /* no commit checked out yet */ }
+  if (head !== commit) {
+    try { git('cat-file', '-e', `${commit}^{commit}`); } catch { git('fetch', '--quiet', '--filter=blob:none', 'origin', commit); }
+    git('checkout', '--quiet', '--detach', commit);
+    log.push(`release ${root} now at ${commit}`);
+  }
+  return cli;
+}
+
 export const RECONCILE_UNIT = 'ci-runner-host-reconcile';
 
 /**
@@ -510,7 +544,9 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
   // This apply is the reconcile a deferral asked for; a change it must defer again marks it pending again.
   for (const r of record.runners) rmSync(paths(r).reconcilePending, { force: true });
   if (record.reconcile && record.parametersPath) {
-    const cli = new URL('../scripts/ci-runner-host.mjs', import.meta.url).pathname;
+    // CR-34: the reconcile runs the service's installed release, never whichever copy ran this apply (a temporary
+    // clone that was then removed left the unit pointing at nothing, 2026-11-01).
+    const cli = ensureRelease(record.reconcile, log);
     const units = renderReconcile(record, { cli });
     const timer = join(unitDir(), `${RECONCILE_UNIT}.timer`);
     if (existsSync(timer)) {
