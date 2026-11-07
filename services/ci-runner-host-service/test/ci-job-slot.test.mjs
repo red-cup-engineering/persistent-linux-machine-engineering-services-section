@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderStartHook, paths } from '../src/ci-runner-host.mjs';
@@ -113,8 +113,8 @@ case "$2" in */pulls/*) cat '${state}/pull' 2>/dev/null || exit 1 ;; */commits/*
     writeFileSync(paths(r).startHook, renderStartHook(r), { mode: 0o755 });
     const event = join(state, 'event.json');
     const old = 'a'.repeat(40), newer = 'b'.repeat(40);
-    // The stand-in worker is its own process ("; true" keeps bash from exec-ing the hook), so the slot frees when it exits.
-    const runHook = (env) => execFileSync('bash', ['-c', `bash ${paths(r).startHook}; true`], { stdio: 'ignore', env: { ...process.env, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '42', GITHUB_EVENT_PATH: event, GH_TOKEN: 'job', ...env } });
+    // The stand-in worker stays the hook parent and forwards its strict-shell status, so the slot frees when it exits.
+    const runHook = (env) => execFileSync('bash', ['-c', `bash --noprofile --norc -e -o pipefail ${paths(r).startHook}; result=$?; exit "$result"`], { stdio: 'ignore', env: { ...process.env, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '42', GITHUB_EVENT_PATH: event, GH_TOKEN: 'job', ...env } });
     const cancels = () => (existsSync(calls) ? execFileSync('cat', [calls], { encoding: 'utf8' }) : '');
     writeFileSync(event, JSON.stringify({ pull_request: { number: 7, head: { sha: old } } }));
     writeFileSync(join(state, 'pull'), `${old}\n`); runHook({ GITHUB_EVENT_NAME: 'pull_request' });
@@ -155,7 +155,7 @@ esac
     writeFileSync(paths(r).startHook, renderStartHook(r), { mode: 0o755 });
     const sha = 'a'.repeat(40);
     writeFileSync(join(state, 'default'), 'main\n'); writeFileSync(join(state, 'branch'), `${sha}\n`);
-    const push = (ref, env = {}) => execFileSync('bash', ['-c', `bash ${paths(r).startHook}; true`], { stdio: 'ignore', env: { ...process.env,
+    const push = (ref, env = {}) => execFileSync('bash', ['-c', `bash --noprofile --norc -e -o pipefail ${paths(r).startHook}; result=$?; exit "$result"`], { stdio: 'ignore', env: { ...process.env,
       GITHUB_EVENT_NAME: 'push', GITHUB_REF: ref, GITHUB_SHA: sha, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '9',
       GITHUB_WORKFLOW_REF: `o/r/.github/workflows/ci.yml@${ref}`, ...env } });
     const count = () => (existsSync(calls) ? execFileSync('cat', [calls], { encoding: 'utf8' }).split('\n').length - 1 : 0);
@@ -171,4 +171,75 @@ esac
     writeFileSync(join(state, 'open-head'), `${'b'.repeat(40)}\n`);
     push('refs/heads/work'); assert.equal(count(), 2, 'the PR head is another commit: runs');
   } finally { rmSync(state, { recursive: true, force: true }); }
+});
+
+
+// GitHub Actions invokes JOB_STARTED with errexit and pipefail, before checkout.
+// The mandatory slot still fails closed; optional freshness reads must not turn
+// an unavailable supplier into a failed job or accept its partial output.
+test('native strict hook shell preserves jobs on unreadable freshness evidence (CR-28, CR-33, CR-35)', () => {
+  const state = mkdtempSync(join(tmpdir(), 'ci-strict-hook-'));
+  const old = 'a'.repeat(40), newer = 'b'.repeat(40);
+  const cases = [
+    { name: 'missing-jq', event: 'pull_request', jq: 'absent' },
+    { name: 'missing-gh', event: 'push', gh: 'absent' },
+    { name: 'failed-gh', event: 'push', branch: 'exit 1' },
+    { name: 'partial-branch', event: 'push', branch: `printf '${newer}'; exit 1` },
+    { name: 'partial-pr', event: 'pull_request', pull: `printf '${newer}'; exit 1` },
+    { name: 'failed-jq', event: 'pull_request', jq: 'failed' },
+    { name: 'malformed-event', event: 'pull_request', contents: '{broken' },
+    { name: 'missing-pr-number', event: 'pull_request', contents: '{}' },
+    { name: 'missing-default', event: 'push', default: 'exit 1' },
+    { name: 'partial-duplicate', event: 'push', duplicate: `printf '${old}'; exit 1` },
+    { name: 'failed-workflow', event: 'push', workflow: 'exit 1' },
+    { name: 'failed-cancel', event: 'push', branch: `printf '${newer}'`, cancel: 'exit 1', cancels: 1 },
+    { name: 'no-policy', event: 'push', noPolicy: true },
+  ];
+  try {
+    for (const scenario of cases) {
+      const dir = join(state, scenario.name), calls = join(dir, 'calls');
+      execFileSync('mkdir', ['-p', dir]);
+      const gh = join(dir, 'gh'), jq = join(dir, 'jq'), event = join(dir, 'event.json');
+      writeFileSync(gh, `#!/bin/bash
+if [ "$1" = run ] && [ "$2" = cancel ]; then echo cancel >> '${calls}'; ${scenario.cancel ?? 'exit 0'}; fi
+case "$2" in
+  repos/o/r) ${scenario.default ?? "printf main"} ;;
+  repos/o/r/pulls\\?*) ${scenario.duplicate ?? `printf '${old}'`} ;;
+  repos/o/r/pulls/*) ${scenario.pull ?? `printf '${old}'`} ;;
+  repos/o/r/commits/*) ${scenario.branch ?? `printf '${old}'`} ;;
+  repos/o/r/contents/*) ${scenario.workflow ?? "printf 'on: [push]\\n' | base64 -w0"} ;;
+  *) exit 1 ;;
+esac
+`, { mode: 0o755 });
+      writeFileSync(jq, '#!/bin/bash\nprintf 7\nexit 1\n', { mode: 0o755 });
+      writeFileSync(event, scenario.contents ?? JSON.stringify({ pull_request: { number: 7, head: { sha: old } } }));
+      const r = { name: scenario.name, root: join(dir, 'runner'), version: '2.0.0',
+        registration: { executable: scenario.gh === 'absent' ? join(dir, 'absent-gh') : gh },
+        cancelSupersededJobs: scenario.noPolicy ? undefined : { jq: scenario.jq === 'absent' ? join(dir, 'absent-jq') : scenario.jq === 'failed' ? jq : '/usr/bin/jq' } };
+      const hook = join(dir, 'hook.sh');
+      writeFileSync(hook, renderStartHook(r));
+      // A separate worker retains hook parent identity and forwards the real
+      // status, rather than the old tests' unconditional '; true'.
+      const result = spawnSync('bash', ['-c', 'bash --noprofile --norc -e -o pipefail "$1"; result=$?; exit "$result"', '_', hook], {
+        timeout: 5000, stdio: 'ignore', env: { ...process.env,
+          GITHUB_EVENT_NAME: scenario.event, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '42',
+          GITHUB_EVENT_PATH: event, GITHUB_REF: 'refs/heads/work', GITHUB_SHA: old,
+          GITHUB_WORKFLOW_REF: 'o/r/.github/workflows/ci.yml@refs/heads/work' },
+      });
+      assert.equal(result.error, undefined, scenario.name);
+      assert.equal(result.status, 0, `${scenario.name}: optional evidence must not fail the job`);
+      assert.equal(existsSync(calls) ? readFileSync(calls, 'utf8').trim().split('\n').length : 0, scenario.cancels ?? 0, scenario.name);
+      const holder = paths(r).slotHolder;
+      if (existsSync(holder)) { try { process.kill(Number(readFileSync(holder, 'utf8'))); } catch {} }
+    }
+    const blocked = join(state, 'not-a-directory');
+    writeFileSync(blocked, 'occupied');
+    const hook = join(state, 'blocked.sh');
+    writeFileSync(hook, renderStartHook({ name: 'blocked', root: join(blocked, 'runner'), version: '2.0.0' }));
+    const refused = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', hook], { timeout: 5000, stdio: 'ignore' });
+    assert.notEqual(refused.status, 0, 'mandatory host slot setup must still refuse');
+  } finally {
+    for (const pid of execFileSync('bash', ['-c', `cat '${state}'/*/ci-job-slot/*.pid 2>/dev/null || true`], { encoding: 'utf8' }).split('\n').filter(Boolean)) { try { process.kill(Number(pid)); } catch {} }
+    rmSync(state, { recursive: true, force: true });
+  }
 });

@@ -181,23 +181,25 @@ export function renderStartHook(r) {
   // CR-33: a job whose commit is no longer current when it takes the slot is cancelled instead of run: the branch
   // moved on, or the pull request's head changed or it closed. Only definite evidence cancels; an unreadable answer runs
   // the job. This is cancel-in-progress for every repository at once, with no workflow edited.
+  // GitHub invokes this hook with bash -e -o pipefail. Freshness is optional evidence, unlike the host slot below:
+  // failed reads clear their output, and a failed cancellation must not turn the hook into a checkout gate.
   const supersededLines = cancel === undefined ? [] : [
     `gh=${q(r.registration.executable)}; jq=${q(cancel.jq)}; mine=""; current=""`,
-    'api() { env -u GH_TOKEN -u GITHUB_TOKEN "$gh" api "$@" 2>/dev/null; }',
+    'api() { local answer; if answer=$(env -u GH_TOKEN -u GITHUB_TOKEN "$gh" api "$@" 2>/dev/null); then printf \'%s\\n\' "$answer"; else return 1; fi; }',
     'case "${GITHUB_EVENT_NAME:-}" in',
     '  pull_request|pull_request_target)',
-    '    number=$("$jq" -r \'.pull_request.number // empty\' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null)',
-    '    mine=$("$jq" -r \'.pull_request.head.sha // empty\' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null)',
-    '    [[ "$number" =~ ^[0-9]+$ ]] && current=$(api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq \'if .state == "open" then .head.sha else "closed" end\') ;;',
+    '    number=$("$jq" -r \'.pull_request.number // empty\' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null) || number=""',
+    '    mine=$("$jq" -r \'.pull_request.head.sha // empty\' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null) || mine=""',
+    '    if [[ "$number" =~ ^[0-9]+$ ]]; then current=$(api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq \'if .state == "open" then .head.sha else "closed" end\') || current=""; fi ;;',
     '  push)',
-    '    case "${GITHUB_REF:-}" in refs/heads/*) mine=${GITHUB_SHA:-}; current=$(api "repos/$GITHUB_REPOSITORY/commits/${GITHUB_REF#refs/heads/}" --jq .sha) ;; esac ;;',
+    '    case "${GITHUB_REF:-}" in refs/heads/*) mine=${GITHUB_SHA:-}; current=$(api "repos/$GITHUB_REPOSITORY/commits/${GITHUB_REF#refs/heads/}" --jq .sha) || current="" ;; esac ;;',
     'esac',
     // CR-35: a push run on a branch whose open pull request has this exact head, when the same workflow also runs on
     // pull_request, repeats the pull request's run of the same commit: the push run is cancelled, never the PR run.
     'duplicate=no',
     'if [ "${GITHUB_EVENT_NAME:-}" = push ] && [ -n "$mine" ] && [ "$current" = "$mine" ]; then',
     '  branch=${GITHUB_REF#refs/heads/}; owner=${GITHUB_REPOSITORY%%/*}',
-    '  default=$(api "repos/$GITHUB_REPOSITORY" --jq .default_branch)',
+    '  default=$(api "repos/$GITHUB_REPOSITORY" --jq .default_branch) || default=""',
     '  workflow=${GITHUB_WORKFLOW_REF:-}; workflow=${workflow#*/*/}; workflow=${workflow%@*}',
     '  if [ -n "$default" ] && [ "$branch" != "$default" ] && [[ "$workflow" =~ ^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$ ]] \\',
     '      && [ "$(api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$owner:$branch" --jq \'.[0].head.sha // empty\')" = "$mine" ] \\',
@@ -206,7 +208,7 @@ export function renderStartHook(r) {
     'fi',
     'if [[ "$mine" =~ ^[0-9a-f]{40}$ ]] && { { [[ "$current" =~ ^([0-9a-f]{40}|closed)$ ]] && [ "$current" != "$mine" ]; } || [ "$duplicate" = yes ]; } \\',
     '    && [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && [[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ ]]; then',
-    '  env -u GH_TOKEN -u GITHUB_TOKEN "$gh" run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1',
+    '  env -u GH_TOKEN -u GITHUB_TOKEN "$gh" run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || true',
     'fi',
   ];
   return [
@@ -611,4 +613,5 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
   }
   return log;
 }
+
 
