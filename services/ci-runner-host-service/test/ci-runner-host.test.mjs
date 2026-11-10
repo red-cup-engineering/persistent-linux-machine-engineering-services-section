@@ -99,6 +99,33 @@ test('a symlinked bin is not the installed version; hard-linked real directories
   assert.equal(isVersion(run, v), true);
 });
 
+test('the installed runner starts as CommonJS under an ES module owner', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ci-commonjs-'));
+  const runner = { ...r, root: join(root, 'state', 'runner') };
+  const p = paths(runner);
+  try {
+    writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
+    mkdirSync(join(root, 'commands'), { recursive: true });
+    writeFileSync(join(root, 'commands', 'systemctl'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    mkdirSync(join(root, 'home', '.config', 'systemd', 'user'), { recursive: true });
+    for (const dir of ['bin', 'externals']) mkdirSync(join(p.version, dir), { recursive: true });
+    writeFileSync(join(p.version, 'bin', 'Runner.Listener'), 'fixture');
+    writeFileSync(join(p.version, 'bin', 'RunnerService.js'), 'require("node:assert/strict");process.stdout.write("commonjs");\n');
+    mkdirSync(p.runner, { recursive: true });
+    writeFileSync(join(p.runner, '.runner'), JSON.stringify({ agentName: runner.name, gitHubUrl: runner.scope }));
+    const source = new URL('../src/ci-runner-host.mjs', import.meta.url).href;
+    const code = `import {apply} from ${JSON.stringify(source)}; await apply(${JSON.stringify({ runners: [runner] })});`;
+    const environment = { ...process.env, HOME: join(root, 'home'), PATH: join(root, 'commands') + ':' + process.env.PATH };
+    execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: environment });
+    assert.equal(execFileSync(process.execPath, [join(p.runner, 'bin', 'RunnerService.js')], { encoding: 'utf8' }), 'commonjs');
+    assert.equal(isVersion(p.runner, p.version), true);
+    execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: environment });
+    assert.equal(execFileSync(process.execPath, [join(p.runner, 'bin', 'RunnerService.js')], { encoding: 'utf8' }), 'commonjs');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a parent cap below the runner\'s ceiling is found (CR-9)', () => {
   const max = { '/user.slice': '3221225472', '/user.slice/user-1000.slice': 'max', '/user.slice/user-1000.slice/user@1000.service': 'max' };
   assert.equal(ancestorCeiling('/user.slice/user-1000.slice/user@1000.service/ci.slice/ci-runner-box.service', (c) => max[c] ?? 'max'), 3221225472);

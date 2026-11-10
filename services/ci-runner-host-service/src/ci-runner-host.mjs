@@ -449,6 +449,8 @@ function link(r, log) {
   const p = paths(r);
   mkdirSync(p.runner, { recursive: true });
   if (!existsSync(versionMarker(p.version))) return;
+  const packagePath = join(p.runner, 'package.json');
+  if (!existsSync(packagePath)) writeIfChanged(packagePath, '{"type":"commonjs"}\n', log);
   if (!isVersion(p.runner, p.version)) {
     if (workerRunning(r)) { markReconcilePending(r); log.push(`${r.name}: relinking deferred while its job runs`); return; }
     shOk('systemctl', ['--user', 'stop', unitName(r)]);
