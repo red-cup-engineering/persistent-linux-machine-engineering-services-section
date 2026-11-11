@@ -1,0 +1,88 @@
+name: GitHub Guix machine release
+# Bare Cedar Fog is the integrated Group development workspace and MetroPlat host.
+# Its machine definition is scoped inside that workspace. Publication builds only;
+# deployment remains an explicit governed action while the host is held.
+on:
+  push:
+    branches: [main]
+    paths:
+      - lib/emsenn/services/561-group/services/561-group-services-section/services/561-group-operations-services-section/services/bare-cedar-fog-services-section/data/records/machine-deployment-service-records/metroplat/**
+      - .github/workflows/release.yml
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [build, deploy, check-failure, rollback]
+        default: build
+concurrency:
+  group: bare-cedar-fog-guix-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'production' }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: [self-hosted, Linux, X64, guix, bare-cedar-fog]
+    timeout-minutes: 90
+    env:
+      MACHINE_SOURCE_DIRECTORY: lib/emsenn/services/561-group/services/561-group-services-section/services/561-group-operations-services-section/services/bare-cedar-fog-services-section/data/records/machine-deployment-service-records/metroplat
+    defaults:
+      run:
+        working-directory: lib/emsenn/services/561-group/services/561-group-services-section/services/561-group-operations-services-section/services/bare-cedar-fog-services-section/data/records/machine-deployment-service-records/metroplat
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      # The runner's workspace is shared with the pull-request checks, which check out submodules at their
+      # own pins; a later pin change leaves those gitlinks dirty and the deploy refuses the snapshot. The
+      # release clones its pinned sources itself and reads no submodule, so it releases them first.
+      - name: Release submodule checkouts left by other workflows
+        run: git submodule status | awk '$1 !~ /^-/ {print $2}' | xargs -r git submodule deinit --force --
+      - name: Build and receive the exact MetroPlat deployment definition
+        env:
+          NODE_OPTIONS: --max-old-space-size=768
+          RELEASE_MODE: ${{ github.event_name == 'pull_request' && 'build' || inputs.mode || 'build' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.cache/561-group"
+          exec 9>"$HOME/.cache/561-group/github-guix-build.lease"
+          flock --exclusive 9
+          export GITHUB_SHA="$(git rev-parse HEAD)"
+          # Controller bootstrap (projected from guix-machine-release-service scripts/controller-bootstrap.sh).
+          # Resolve the release controller from the machine repository's own gitlink and fetch exactly the commit it records.
+          # Shell and git only: the machine repository mounts the controller once, at its root.
+          controller_repository=red-cup-engineering/guix-machine-release-service
+          controller_top="$(git rev-parse --show-toplevel)"
+          controller_names="$(git -C "$controller_top" config -f .gitmodules --get-regexp "^submodule\\..*\\.url$" | awk -v a="https://github.com/$controller_repository.git" -v b="https://github.com/$controller_repository" "\$2==a || \$2==b {sub(/^submodule\\./, \"\", \$1); sub(/\\.url$/, \"\", \$1); print \$1}")"
+          [ "$(printf "%s" "$controller_names" | grep -c .)" = 1 ] || { echo "the machine repository must mount the release controller exactly once" >&2; exit 1; }
+          controller_mount="$(git -C "$controller_top" config -f .gitmodules --get "submodule.$controller_names.path")"
+          controller_commit="$(git -C "$controller_top" ls-tree HEAD -- "$controller_mount" | awk "\$2==\"commit\" {print \$3}")"
+          [[ "$controller_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "release controller needs an exact commit" >&2; exit 1; }
+          controller_path=.
+          controller_git=(git -c credential.helper= -c 'credential.helper=!gh auth git-credential')
+          controller_root="$HOME/.cache/561-group/github-source-bootstrap/$GITHUB_REPOSITORY/$GITHUB_SHA/controller"
+          mkdir -p "$(dirname "$controller_root")"
+          [ -d "$controller_root/.git" ] || "${controller_git[@]}" clone -q --filter=blob:none --no-checkout "https://github.com/$controller_repository.git" "$controller_root"
+          "${controller_git[@]}" -C "$controller_root" fetch -q --depth=1 origin "$controller_commit"
+          git -C "$controller_root" sparse-checkout disable
+          git -C "$controller_root" checkout -q --detach "$controller_commit"
+          service="$(realpath "$controller_root/$controller_path")"
+          case "$service/" in "$(realpath "$controller_root")/"*) ;; *) echo 'release controller resolves outside its repository' >&2; exit 1;; esac
+          grep -Eq '"name": *"@red-cup-engineering/guix-machine-release-service"' "$service/package.json" || { echo 'selected source is not the release controller package' >&2; exit 1; }
+          echo "RELEASE_CONTROLLER=$service" >> "$GITHUB_ENV"; RELEASE_CONTROLLER="$service"
+          # End controller bootstrap.
+          guix shell node -- node "$service/scripts/prepare-build-swap.mjs" machine.json
+          work="$HOME/.cache/561-group/github-bare-cedar-fog-runs/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          guix repl -- "$service/scripts/pinned-guix.scm" channels.scm shell guile guile-json node -- \
+            guile --no-auto-compile "$service/scripts/github-machine-release.scm" "$GITHUB_WORKSPACE/$MACHINE_SOURCE_DIRECTORY" "$work" "$RELEASE_MODE"
+      - name: Record the outcome for repository readers
+        if: always()
+        env:
+          JOB_OUTCOME: ${{ job.status }}
+        run: |
+          work="$HOME/.cache/561-group/github-bare-cedar-fog-runs/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -n "${RELEASE_CONTROLLER:-}" ]; then
+            guix shell node -- node "$RELEASE_CONTROLLER/scripts/record-outcome.mjs" "$work"
+          else
+            echo "Machine snapshot: \`$GITHUB_SHA\`; the release controller was not resolved, so no outcome was recorded." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,0 +1,51 @@
+{
+  "name": "@red-cup-engineering/wsl-host-service",
+  "version": "0.4.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/persistent-linux-machine-engineering-services-section.git",
+    "directory": "services/wsl-host-service"
+  },
+  "type": "module",
+  "description": "Generic WSL2 host engineering: renders and idempotently installs a WSL2 host's Windows-side and Linux-side configuration from one parameter record.",
+  "files": [
+    "assets",
+    "scripts",
+    "specifications",
+    "src",
+    "test/user-unit-quarantine.preventive-native.mjs",
+    "test/user-unit-quarantine-completion.test.mjs",
+    "test/user-unit-quarantine-completion.native.mjs"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:native:quarantine-release": "node --test test/user-unit-quarantine.native.mjs",
+    "test:native:quarantine-preventive": "node --test test/user-unit-quarantine.preventive-native.mjs",
+    "test:native:quarantine-completion": "node test/user-unit-quarantine-completion.native.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "wsl-host": "./scripts/wsl-host.mjs",
+    "host-free": "./scripts/host-free.mjs"
+  },
+  "exports": {
+    ".": "./src/wsl-host.mjs",
+    "./managed-timers": "./src/managed-timers.mjs",
+    "./storage-providers": "./src/storage-providers.mjs",
+    "./orphan-swap": "./src/orphan-swap.mjs",
+    "./user-unit-retirement": "./src/user-unit-retirement.mjs",
+    "./native-compaction": "./src/native-compaction.mjs",
+    "./native-maintenance-caller": "./src/native-maintenance-caller.mjs",
+    "./mounted-discard": "./src/mounted-discard.mjs",
+    "./sparse-disk": "./src/sparse-disk.mjs",
+    "./trim-timer": "./src/trim-timer.mjs",
+    "./sparse-maintenance": "./src/sparse-maintenance.mjs",
+    "./host-free": "./src/host-free.mjs",
+    "./capacity-commands": "./src/capacity-commands.mjs"
+  },
+  "receivingTests": [
+    "test/user-unit-quarantine-completion.test.mjs"
+  ]
+}

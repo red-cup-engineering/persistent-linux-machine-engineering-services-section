@@ -1,0 +1,81 @@
+{
+  "type": "OriginalWslHostSourceQualification",
+  "version": 1,
+  "candidateVersion": "0.2.0",
+  "sourceIndexSHA256": "eee8aa7619377a2aef7b47a28cbcddf26a2dbc2a331358ed8978014376270bee",
+  "script": "node --test test/*.test.mjs",
+  "allDeclaredTestFiles": [
+    "test/backing-capacity.test.mjs",
+    "test/user-unit-quarantine.test.mjs",
+    "test/wsl-host.test.mjs"
+  ],
+  "counts": {
+    "tests": 46,
+    "pass": 46,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "node": "24.18.0",
+  "durationMs": 1027.499044,
+  "sourceFilesUnchanged": 23,
+  "actualHOMEAndCODEXHOME": "preserved",
+  "temporaryAndCachePaths": "explicitly owned typed logs",
+  "scope": {
+    "unit": "wsl-host-source-qualification-20261021-v3.scope",
+    "invocation": "d52568d66dd647c9b2fb5e408444ade4",
+    "terminal": true,
+    "emptyControlGroup": true,
+    "memoryBytes": 2147483648,
+    "cpuPercent": 100,
+    "seconds": 45
+  },
+  "evidence": [
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/final-v3-source-index.json",
+      "bytes": 5966,
+      "sha256": "eee8aa7619377a2aef7b47a28cbcddf26a2dbc2a331358ed8978014376270bee"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/run-original-full-tests-v3.mjs",
+      "bytes": 2370,
+      "sha256": "70367b2bade5c5d7d32c68ced2f5f2b5dd6db47e27362c9dfc28207886d4038c"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/full-original-tests-v3/started.json",
+      "bytes": 7146,
+      "sha256": "d4059f87d4d1f474a389e44f99a151389a9d69fa5da58006d4b634ccd3e3e3e8"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/full-original-tests-v3/result.json",
+      "bytes": 355,
+      "sha256": "9427f666afc5d1cce838133da9323a6d4d5aa10d18324a1472c7687b05dc6d5e"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/full-original-tests-v3/stdout.txt",
+      "bytes": 4383,
+      "sha256": "bb399506c1150a60ee4480767594bce8f8726116a7cdc82c1a93be97e3dce1c6"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/full-original-tests-v3/stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/actual-full-original-tests-v3-dispatch.txt",
+      "bytes": 432,
+      "sha256": "9b62c09606aabecd64350ae1af6361fdc4cccf775525eccaaa2814f6fa967b1e"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/actual-full-original-tests-v3-terminal-scope.txt",
+      "bytes": 64,
+      "sha256": "4ed5c09a36fcdf9396f24bd85a0764e03aa5f46cf038b266bf1794063befde7e"
+    }
+  ],
+  "limits": [
+    "Source tests and earlier original native capacity port only",
+    "No native quarantine migration or production maintenance qualification",
+    "No installed host migration, registry release or useful operation claimed"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "kind": "IndependentOriginalWslDurableGithubTimerSourceNativeReceiving",
+  "status": "MET_FOR_SELECTED_SOURCE_NATIVE_FIXTURES_AND_REAL_UNIT_PARSER",
+  "base": "3a7078513bf257397be7b5607570bf12aa437198",
+  "sourceProposalSha256": "e67cc55ecadf61d6cc837f97f17f6f7201d61f50e596c5715e920617a381c604",
+  "sourcePaths": [
+    "src/managed-timers.mjs",
+    "src/wsl-host.mjs",
+    "scripts/wsl-host.mjs",
+    "test/managed-timers.test.mjs",
+    "specifications/requirements.md",
+    "specifications/design.md"
+  ],
+  "native60AndParserIndexSha256": "7d4c1d8ee7890f3d2671b7b13a7b43d41f573d6b34dfccee7cfccdaeb3479b2c",
+  "independentEvidence": "Root inspected source/meaningful corrective deltas and verified all16 indexed carrier bytes; actual60 pass with zero fail/cancel/skip/todo and original systemd255 parser0. Earlier failures remain as immutable evidence.",
+  "configuration": {
+    "base": "64e2e827c67852ebc3d4c612688a7ba7464740e9",
+    "proposalSha256": "a535dc7f85e23474e17ed36cd96fc444d116b9d411e2ebaae01957bb00ba2f24",
+    "actualOriginalRecordSha256": "13eb475bfd266c1aa972bf8c850973bed8016b615529d398ac65cdcc322925a4",
+    "independentSemanticComparison": "Removing new linux.managedTimers from proposed record exactly reproduces current remote JSON. All quarantine and100GB policy fields remain untouched."
+  },
+  "sourceAndRuntimeRules": [
+    "Only original selected managed-timers component may apply the declared two system-manager unit files. No kernel/Windows/global host replay.",
+    "Run as actual unprivileged emsenn with original HOME/CODEX identity, selected owning paths,10min+boot trigger and Persistent=false.",
+    "Pause only selected old timer, receive quiescent original user/system service cohorts, preserve source journal/pulse jobs, and receive exact unit command/owner/working-directory before convergence.",
+    "Scoped corrective fixtures inside the received finite local envelope proceed without repeated coordinator permission; actual source publication/host effects retain their exact guards."
+  ],
+  "notYetClaimed": [
+    "source release0.2.1 publication",
+    "canonical registry source/artifact receiving",
+    "BCF source publication",
+    "installed units or durable operation",
+    "next actual scheduled pulse"
+  ],
+  "bounds": {
+    "nativeFixtureSeconds": 30,
+    "nativeFixtureMemoryBytes": 201326592,
+    "nativeFixtureOutputBytes": 2097152,
+    "networkOrLifecycleInFixtures": false
+  }
+}

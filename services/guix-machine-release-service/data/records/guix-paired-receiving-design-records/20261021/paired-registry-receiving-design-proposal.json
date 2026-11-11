@@ -1,0 +1,50 @@
+{
+  "kind": "OriginalGuix149150CDE13ReadOnlyDesignProposal",
+  "scope": "Existing native exact paired comparison, original request and original consumer obligations; no source construction/effects",
+  "proposal": {
+    "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/paired-registry-receiving-contract-design.md",
+    "sha256": "cbf9cd1f04f2d94440c4620cfc38dfc278bf1118edad87a4f20364eea971eef5",
+    "bytes": 15772
+  },
+  "primaryCustody": {
+    "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/primary-intake-custody.json",
+    "sha256": "fe8217d36d3d7d20f8133e02f2e0b7161c497d03533fefb2610ac8194cf94fae",
+    "bytes": 10746
+  },
+  "nativePrerequisites": {
+    "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/native-prerequisite-locators.json",
+    "sha256": "87d908d069270cb75a27b33a6b8db473245327f118e75560b3fd191efe71010e",
+    "bytes": 5593
+  },
+  "sourceIdentities": {
+    "guixMain": "c54c65064e678963c00e36edcded771ac473988c",
+    "guix149": "e840d63cfbdcff09eab07f68937ce0114efc4920",
+    "guix150": "9dd914a1e4b6ce464e396d84a7e264a605363386",
+    "cde13": "1f94535017573c8c6fcb789d7e9d2f3df0372915",
+    "cdeMainRead": "9512d26d55bb5bd1278aec7916c731d8d249117d",
+    "actualCodeVersion": "0.14.24"
+  },
+  "actualUnreceivedEdges": [
+    "OriginalGuix149 source-onlyv4 stops before paired fixed native executor",
+    "ExistingCode14.24 exposes local workspace/config policy identities, not whole inherited effective-policy custody required by originalGuixcontract",
+    "CDE13 uniquecheck-target command not integrated at currentdriver; preserve explicitexactcandidate machine gate",
+    "Actualindependent two-product/targetchain and sourcechangedparticipation absent; singleG3/CDEsupplier receipts cannotreplacepair",
+    "Guix150 process/status gate sourcequalified but originalnative/machine and subsequentdeterministicjob receiving stillopen"
+  ],
+  "reviewBeforeConstruction": [
+    "Finite nativeCode effective-policy supportedcontext/interface amendment atoriginalowner",
+    "ExactCDE13/currentdriver reconciliation preserves no-effecttrustedCHANNELS/registeredtargetcontract",
+    "Premerge exactsource constructor/checker selection for each side; no implicitmatching-driverwaiver",
+    "ExistingGuixv4 source/consumer/obligation integration and pairedexecutor detailed plan under actualnativecapacity admission"
+  ],
+  "unchangedCodeCandidate": true,
+  "codeBindingsActive": false,
+  "testsRun": false,
+  "sourceFabricated": false,
+  "graphsInstalled": false,
+  "buildsRun": false,
+  "publicationPerformed": false,
+  "hostEffects": false,
+  "sourceOrAuthorityEdits": false,
+  "nativeWorkAdmissionClaimed": false
+}

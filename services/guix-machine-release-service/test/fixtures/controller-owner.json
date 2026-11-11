@@ -1,0 +1,81 @@
+[
+  {
+    "name": "mounted once by the machine",
+    "spec": {
+      "repositories": [
+        {
+          "repository": "561-group/bare-cedar-fog",
+          "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "."
+        },
+        {
+          "repository": "red-cup-engineering/guix-machine-release-service",
+          "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "controller"
+        }
+      ]
+    },
+    "accepted": true
+  },
+  {
+    "name": "not mounted",
+    "spec": {
+      "repositories": [
+        {
+          "repository": "561-group/bare-cedar-fog",
+          "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "."
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "mounted twice",
+    "spec": {
+      "repositories": [
+        {
+          "repository": "red-cup-engineering/guix-machine-release-service",
+          "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "controller"
+        },
+        {
+          "repository": "red-cup-engineering/guix-machine-release-service",
+          "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "controller"
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "abbreviated commit",
+    "spec": {
+      "repositories": [
+        {
+          "repository": "red-cup-engineering/guix-machine-release-service",
+          "commit": "aaaaaaa",
+          "path": "controller"
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "no commit",
+    "spec": {
+      "repositories": [
+        {
+          "repository": "red-cup-engineering/guix-machine-release-service",
+          "path": "controller"
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "no sources",
+    "spec": {},
+    "accepted": false
+  }
+]

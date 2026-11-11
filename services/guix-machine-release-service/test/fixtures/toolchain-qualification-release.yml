@@ -1,0 +1,574 @@
+name: GitHub Guix machine release
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '*/15 * * * *'
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [build, deploy, check-failure, rollback, advance, qualify-toolchain]
+        default: build
+concurrency:
+  group: cold-red-gate-guix-${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'qualify-toolchain') || (github.event_name == 'issue_comment' && github.event.action == 'created' && github.repository == '561-group/cold-red-gate' && github.event.repository.full_name == '561-group/cold-red-gate' && github.event.repository.id == 1408796038 && github.event.issue.pull_request && github.event.comment.body == '/release qualify-toolchain' && github.actor == 'emsenn' && github.triggering_actor == 'emsenn' && github.event.comment.user.login == 'emsenn')) && 'toolchain-qualification' || github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'schedule' || github.event_name == 'issue_comment' || inputs.mode == 'advance') && 'advance' || 'production' }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  toolchain-qualification:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'qualify-toolchain') || (github.event_name == 'issue_comment' && github.event.action == 'created' && github.repository == '561-group/cold-red-gate' && github.event.repository.full_name == '561-group/cold-red-gate' && github.event.repository.id == 1408796038 && github.event.issue.pull_request && github.event.comment.body == '/release qualify-toolchain' && github.actor == 'emsenn' && github.triggering_actor == 'emsenn' && github.event.comment.user.login == 'emsenn') }}
+    runs-on: [self-hosted, Linux, X64, guix, cold-red-gate-build]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Qualify only the reviewed dependency provider
+        env:
+          QUALIFICATION_COMMIT: b6c2a1954ea51939823865cc77227f7fe3f7f49c
+          QUALIFICATION_TREE: a7da6bc27db45675e3d7fe079c31645eb78d3878
+        run: |
+          set -euo pipefail
+          # Strict event gate precedes lease acquisition and all candidate/source fetches.
+          # Preserve pinned-guix.scm profile preference before HOME isolation.
+          # Keep the lexical profile path: realpath would discard Guix provenance.
+          node="$(command -v node)"; guix="$HOME/.config/guix/current/bin/guix"
+          if [ ! -x "$guix" ]; then guix="$(command -v guix)"; fi
+          [ -x "$node" ] && [ -x "$guix" ]
+          env -i GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_ACTOR="$GITHUB_ACTOR" GITHUB_TRIGGERING_ACTOR="$GITHUB_TRIGGERING_ACTOR" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_PATH="$GITHUB_EVENT_PATH" NODE_DISABLE_COMPILE_CACHE=1 "$node" --no-addons --no-global-search-paths --input-type=module - <<'QUALIFICATION_EVENT'
+          import {readFileSync} from "node:fs";
+          function admitToolchainQualificationEvent({eventName,actor,triggeringActor,repository,event}){
+            const refuse=()=>{throw new Error('toolchain qualification event refused');};
+            if(repository!=='561-group/cold-red-gate'||event?.repository?.full_name!==repository||event.repository.id!==1408796038)refuse();
+            if(eventName==='workflow_dispatch'){
+              if(event.inputs?.mode!=='qualify-toolchain')refuse();
+              return;
+            }
+            const number=event.issue?.number;
+            if(eventName!=='issue_comment'||event.action!=='created'||actor!=='emsenn'||triggeringActor!=='emsenn'
+              ||event.comment?.user?.login!=='emsenn'||event.sender?.login!=='emsenn'
+              ||!Number.isSafeInteger(number)||number<1
+              ||event.issue?.pull_request?.url!==`https://api.github.com/repos/${repository}/pulls/${number}`
+              ||event.comment?.issue_url!==`https://api.github.com/repos/${repository}/issues/${number}`
+              ||event.comment?.body!=='/release qualify-toolchain')refuse();
+          }
+          admitToolchainQualificationEvent({eventName:process.env.GITHUB_EVENT_NAME,actor:process.env.GITHUB_ACTOR,triggeringActor:process.env.GITHUB_TRIGGERING_ACTOR,repository:process.env.GITHUB_REPOSITORY,event:JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,"utf8"))});
+          QUALIFICATION_EVENT
+          # This independent CI path never enters release bootstrap or changes machine source pins.
+          [ "$GITHUB_REPOSITORY" = 561-group/cold-red-gate ]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ && "$GITHUB_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ]
+          if ! git cat-file -e "$GITHUB_WORKFLOW_SHA^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$GITHUB_WORKFLOW_SHA"
+          fi
+          [ "$(git rev-parse "$GITHUB_WORKFLOW_SHA:.github/workflows/release.yml")" = "$(git hash-object --no-filters .github/workflows/release.yml)" ]
+          [ "$(git hash-object --no-filters channels.scm)" = be2ad3e698618dc916fe126880b6ed9573ee1bb3 ]
+          [ -f channels.scm ] && [ ! -L channels.scm ]
+          # Reuse the same existing compute lease, without maintenance or service mutations.
+          mkdir -p "$HOME/.cache/561-group"
+          exec 9>"$HOME/.cache/561-group/github-guix-build.lease"
+          flock --exclusive 9
+          qualification_root="$(mktemp -d "$RUNNER_TEMP/toolchain-qualification.XXXXXX")"
+          trap 'rm -rf -- "$qualification_root"' EXIT
+          controller="$qualification_root/controller"
+          # Use only the existing source-reader credential mechanism; no credential enters candidate execution.
+          source_git=(git -c core.hooksPath=/dev/null -c credential.helper= -c 'credential.helper=!gh auth git-credential')
+          "${source_git[@]}" clone -q --depth=1 --no-checkout https://github.com/red-cup-engineering/guix-machine-release-service.git "$controller"
+          "${source_git[@]}" -C "$controller" fetch -q --depth=1 origin "$QUALIFICATION_COMMIT"
+          git -c core.hooksPath=/dev/null -C "$controller" checkout -q --detach "$QUALIFICATION_COMMIT"
+          [ "$(git -C "$controller" rev-parse HEAD)" = "$QUALIFICATION_COMMIT" ]
+          [ "$(git -C "$controller" rev-parse HEAD^{tree})" = "$QUALIFICATION_TREE" ]
+          [ -z "$(git -C "$controller" status --porcelain --untracked-files=all --ignored=matching)" ]
+          # Compare actual bytes, not just index status (which can conceal assume-unchanged changes).
+          git -C "$controller" ls-tree -r -z HEAD > "$qualification_root/tree-records"
+          [ -s "$qualification_root/tree-records" ]
+          while IFS= read -r -d '' record; do
+            metadata="${record%%$'\t'*}"; file="${record#*$'\t'}"
+            read -r mode type blob <<<"$metadata"
+            [ "$type" = blob ] && { [ "$mode" = 100644 ] || [ "$mode" = 100755 ]; }
+            [ -f "$controller/$file" ] && [ ! -L "$controller/$file" ]
+            [ "$(git hash-object --no-filters "$controller/$file")" = "$blob" ]
+            if [ "$mode" = 100755 ]; then [ -x "$controller/$file" ]; else [ ! -x "$controller/$file" ]; fi
+          done < "$qualification_root/tree-records"
+          # Existing tools only: no guix shell, time-machine, runtime install or manager bootstrap.
+          mkdir "$qualification_root/home" "$qualification_root/tmp" "$qualification_root/results"
+          # Pure diagnostic definitions only, using the selected existing Guix after source verification.
+          env -i HOME="$qualification_root/home" TMPDIR="$qualification_root/tmp" LANG=C.UTF-8 LC_ALL=C.UTF-8 PATH="$(dirname "$guix"):$(dirname "$node"):/usr/bin:/bin" "$guix" repl -- "$controller/test/pinned-guix-diagnostic.scm"
+          qualification_status=0
+          env -i HOME="$qualification_root/home" TMPDIR="$qualification_root/tmp" LANG=C.UTF-8 LC_ALL=C.UTF-8 PATH="$(dirname "$guix"):$(dirname "$node"):/usr/bin:/bin" NODE_DISABLE_COMPILE_CACHE=1 "$node" --no-addons --no-global-search-paths "$controller/scripts/qualify-candidate-toolchain.mjs" "$controller" "$GITHUB_WORKSPACE" "$qualification_root/results" "$QUALIFICATION_COMMIT" "$QUALIFICATION_TREE" || qualification_status=$?
+          if [ "$qualification_status" -ne 0 ] && [ -f "$qualification_root/results/candidate-toolchain-qualification.json" ] && [ ! -L "$qualification_root/results/candidate-toolchain-qualification.json" ]; then
+            cat "$qualification_root/results/candidate-toolchain-qualification.json"
+          fi
+          exit "$qualification_status"
+  release:
+    if: ${{ inputs.mode != 'qualify-toolchain' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request && github.event.comment.body == '/release advance')) }}
+    runs-on: [self-hosted, Linux, X64, guix, cold-red-gate-build]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Build and receive the exact machine snapshot
+        env:
+          RELEASE_REQUEST_HANDLER: |
+            import {readFileSync,writeFileSync,mkdirSync,renameSync,openSync,closeSync,existsSync,fsyncSync,lstatSync,linkSync,unlinkSync} from 'node:fs';
+            import {resolve,join,dirname} from 'node:path';
+            import {randomUUID,createHash} from 'node:crypto';
+            import {tmpdir} from 'node:os';
+            import {spawnSync} from 'node:child_process';
+            import {isCliEntry} from './cli-entry.mjs';
+            
+            export const RELEASE_COMMAND='/release advance';
+            export const HANDOFF_PATHS=Object.freeze(['.github/workflows/release.yml']);
+            // Reviewed CLI carrier: nine command entries and five shared controls. The
+            // exact source identity and all fourteen executed cases are one receiving contract.
+            export const CLI_RECEIVING_QUALIFIER='520c82e6bbfc083b8a7008d2b230637b8606267f';
+            export const CLI_RECEIVING_TESTS=14;
+            const REPOSITORY=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+            const LOGIN=/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+            const SHA=/^[a-f0-9]{40}$/;
+            const positive=value=>Number.isSafeInteger(value)&&value>0;
+            const refuse=reason=>{throw Object.assign(new Error('Release request refused.'),{code:'RELEASE_REQUEST_REFUSED',reason});};
+            
+            /** A functional handler/workflow change admits owner sources before deployment.
+             * Ordinary exact-source/lock pushes retain their original deploy behavior. */
+            export function pushAdmissionMode(event,repository,selectedHead,git){
+              if(event?.repository?.full_name!==repository||event.ref!=='refs/heads/main'||event.deleted===true
+                ||!SHA.test(event.before??'')||/^0+$/.test(event.before)||!SHA.test(event.after??'')||event.after!==selectedHead)
+                refuse('push-identity');
+              try{git(['cat-file','-e',`${event.before}^{commit}`]);}
+              catch{git(['fetch','--no-tags','--depth=1','origin',event.before]);}
+              const paths=git(['diff','--name-only',event.before,event.after,'--',...HANDOFF_PATHS]).trim().split('\n').filter(Boolean);
+              if(paths.some(path=>!HANDOFF_PATHS.includes(path)))refuse('push-diff');
+              return paths.length?'advance':'deploy';
+            }
+            
+            export function readProjectedRuntime(workflow,name){
+              const key={'request-source-admission.mjs':'RELEASE_REQUEST_HANDLER','cli-entry.mjs':'RELEASE_REQUEST_ENTRY'}[name];
+              if(!key)refuse('projection-not-admitted');
+              const begin=`          ${key}: |\n`,start=workflow.indexOf(begin);
+              if(start<0||start!==workflow.lastIndexOf(begin))refuse('projection-not-admitted');
+              const lines=workflow.slice(start+begin.length).split('\n'),bytes=[];
+              for(const line of lines){
+                if(!line.startsWith('            '))break;
+                bytes.push(line.slice(12));
+              }
+              if(!bytes.length)refuse('projection-not-admitted');
+              return bytes.join('\n')+'\n';
+            }
+            
+            export function verifyRequestProjection(snapshot,service){
+              const path=join(snapshot,'.github/workflows/release.yml');
+              if(!existsSync(path)||!lstatSync(path).isFile())refuse('projection-not-admitted');
+              const workflow=readFileSync(path,'utf8');
+              for(const name of ['request-source-admission.mjs','cli-entry.mjs']){
+                const owned=join(service,'scripts',name);
+                if(!existsSync(owned)||!lstatSync(owned).isFile()
+                  ||readProjectedRuntime(workflow,name)!==readFileSync(owned,'utf8'))refuse('projection-not-admitted');
+              }
+            }
+            
+            /** The reviewed owner fixture tests all nine receiver CLI entries through the
+             * actual Guix carrier layout. This is source compatibility, not live health. */
+            export function qualifySelectedController(snapshot,service,execute=spawnSync){
+              verifyRequestProjection(snapshot,service);
+              return qualifyController(service,execute);
+            }
+            export function qualifyController(service,execute=spawnSync){
+              const path=join(service,'test/cli-entry.test.mjs');
+              if(!existsSync(path)||!lstatSync(path).isFile())refuse('source-compatibility-unproved');
+              const bytes=readFileSync(path);
+              const blob=createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+              if(blob!==CLI_RECEIVING_QUALIFIER)refuse('source-compatibility-unproved');
+              let result;
+              try{result=execute(process.execPath,['--test','--test-reporter=tap',path],{cwd:service,encoding:'utf8',timeout:60000,maxBuffer:1048576,
+                env:{PATH:dirname(process.execPath),TMPDIR:tmpdir()}});}catch{refuse('source-compatibility-unproved');}
+              const required=[`tests ${CLI_RECEIVING_TESTS}`,`pass ${CLI_RECEIVING_TESTS}`,'fail 0','cancelled 0','skipped 0','todo 0'];
+              if(result.error||result.status!==0||required.some(line=>!result.stdout?.split('\n').includes(`# ${line}`)))refuse('source-compatibility-unproved');
+              return {kind:'release-source-compatibility',qualifierBlob:blob,tests:CLI_RECEIVING_TESTS,passed:CLI_RECEIVING_TESTS};
+            }
+            
+            /** Event text selects one existing mode; it can never supply code, refs or arguments. */
+            export function releaseRequest(event,repository){
+              if(!REPOSITORY.test(repository??'')||event?.action!=='created'||event.repository?.full_name!==repository
+                ||!positive(event.repository?.id)||!event.issue?.pull_request||!positive(event.issue?.number)
+                ||!positive(event.comment?.id)||event.comment.body!==RELEASE_COMMAND
+                ||!LOGIN.test(event.comment.user?.login??'')||!positive(event.comment.user?.id)
+                ||event.sender?.id!==event.comment.user.id)refuse('event');
+              return Object.freeze({version:1,repository,repositoryId:event.repository.id,issue:event.issue.number,
+                comment:event.comment.id,actor:event.comment.user.login,actorId:event.comment.user.id,mode:'advance',
+                workRef:`https://github.com/${repository}/pull/${event.issue.number}#issuecomment-${event.comment.id}`});
+            }
+            
+            /** Authorization is GitHub's current repository base permission, not author_association. */
+            export async function authorizeReleaseRequest(event,repository,api){
+              const request=releaseRequest(event,repository);
+              const comment=await api('GET',`repos/${repository}/issues/comments/${request.comment}`);
+              if(comment.id!==request.comment||comment.body!==RELEASE_COMMAND||comment.user?.id!==request.actorId
+                ||comment.user?.login!==request.actor||comment.issue_url!==`https://api.github.com/repos/${repository}/issues/${request.issue}`)
+                refuse('comment-changed');
+              const permission=await api('GET',`repos/${repository}/collaborators/${request.actor}/permission`);
+              if(!['write','admin'].includes(permission.permission)||permission.user?.id!==request.actorId
+                ||permission.user?.login!==request.actor)refuse('repository-permission');
+              const pull=await api('GET',`repos/${repository}/pulls/${request.issue}`);
+              if(pull.number!==request.issue||pull.base?.ref!=='main'||pull.base.repo?.id!==request.repositoryId
+                ||pull.base.repo?.full_name!==repository)refuse('work-carrier');
+              return request;
+            }
+            
+            const readJson=file=>JSON.parse(readFileSync(file,'utf8'));
+            function syncDirectory(directory){const fd=openSync(directory,'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
+            function preparedFile(file,value){
+              const next=`${file}.next-${randomUUID()}`,fd=openSync(next,'wx',0o600);
+              try{writeFileSync(fd,JSON.stringify(value,null,2)+'\n');fsyncSync(fd);}finally{closeSync(fd);}
+              return next;
+            }
+            function save(file,value){
+              const next=preparedFile(file,value);
+              renameSync(next,file);syncDirectory(dirname(file));
+            }
+            function claim(file,value){
+              const next=preparedFile(file,value);
+              try{linkSync(next,file);}
+              catch(error){if(error.code==='EEXIST')return false;throw error;}
+              finally{unlinkSync(next);}
+              syncDirectory(dirname(file));return true;
+            }
+            function binding(request){return JSON.stringify(request);}
+            function reportBody(receipt){
+              const result=receipt.result;
+              return `<!-- guix-source-admission:${receipt.request.comment} -->\n`
+                +`Release handoff for ${receipt.request.workRef}\n\n`
+                +`Operation: advance reviewed sources on main\nRun: ${receipt.run}\n`
+                +`Result: ${result.status}\nBefore snapshot: ${receipt.before}\n`
+                +(result.after?`Observed snapshot afterward: ${result.after}\n`:'Observed snapshot afterward: unavailable\n')
+                +`\nDeployment receiving is reported by the admitted snapshot's existing release workflow. This is the source-admission procedure result.\n`;
+            }
+            
+            async function report(receipt,file,api){
+              if(!receipt.result){
+                const prefix=`https://github.com/${receipt.request.repository}/actions/runs/`;
+                const priorId=receipt.run?.startsWith(prefix)?receipt.run.slice(prefix.length):null;
+                if(!/^[1-9][0-9]*$/.test(priorId??'')||!positive(receipt.attempt))refuse('receipt-binding');
+                const priorRun=await api('GET',`repos/${receipt.request.repository}/actions/runs/${priorId}/attempts/${receipt.attempt}`);
+                if(priorRun.id!==Number(priorId)||priorRun.run_attempt!==receipt.attempt||priorRun.status!=='completed')
+                  return {status:'reconciliation-required',run:receipt.run,workRef:receipt.request.workRef};
+                // A completed attempt with only a pre-effect claim cannot prove whether its
+                // external effect happened. Report the obstruction without replaying it.
+                receipt.result={status:'procedure-outcome-unknown',after:null};receipt.state='finished';save(file,receipt);
+              }
+              const body=reportBody(receipt),repo=receipt.request.repository;
+              if(!receipt.report){
+                const identity=await api('GET','user');
+                if(!positive(identity.id))refuse('report-identity');
+                receipt.report={state:'attempting',authorId:identity.id,body};save(file,receipt);
+                // The attempt is durable before POST. Unknown transmission is never retried blindly.
+                try{
+                  const created=await api('POST',`repos/${repo}/issues/${receipt.request.issue}/comments`,{body});
+                  if(!positive(created.id))refuse('report-response');
+                  receipt.report.id=created.id;save(file,receipt);
+                }catch{return {status:'report-reconciliation-required',run:receipt.run,workRef:receipt.request.workRef};}
+              }
+              let found;
+              if(receipt.report.id){
+                found=await api('GET',`repos/${repo}/issues/comments/${receipt.report.id}`);
+              }else{
+                const matches=[];
+                for(let page=1;page<=10;page++){
+                  const comments=await api('GET',`repos/${repo}/issues/${receipt.request.issue}/comments?per_page=100&page=${page}`);
+                  if(!Array.isArray(comments))refuse('report-reading');
+                  matches.push(...comments.filter(x=>x.user?.id===receipt.report.authorId&&x.body===body));
+                  if(comments.length<100)break;
+                  if(page===10)refuse('report-reading-truncated');
+                }
+                if(matches.length!==1)return {status:'report-reconciliation-required',run:receipt.run,workRef:receipt.request.workRef};
+                found=matches[0];
+              }
+              if(!positive(found.id)||found.body!==body||found.user?.id!==receipt.report.authorId
+                ||found.issue_url!==`https://api.github.com/repos/${repo}/issues/${receipt.request.issue}`)
+                refuse('report-readback');
+              receipt.report={...receipt.report,id:found.id,state:'received'};save(file,receipt);
+              return {status:'reported',result:receipt.result.status,run:receipt.run,workRef:receipt.request.workRef,
+                report:`https://github.com/${repo}/pull/${receipt.request.issue}#issuecomment-${found.id}`};
+            }
+            
+            /** Called inside the existing workflow compute lease. Receipt custody is the
+             * existing machine release receipt root. A claimed event never executes twice. */
+            export async function executeReleaseRequest({event,repository,runId,runAttempt=1,receiptRoot,selectedHead,api,head,advance}){
+              const request=await authorizeReleaseRequest(event,repository,api);
+              if(!/^[1-9][0-9]*$/.test(String(runId))||!positive(Number(runAttempt)))refuse('run');
+              const directory=join(receiptRoot,'source-admission-requests');mkdirSync(directory,{recursive:true,mode:0o700});
+              if(!lstatSync(directory).isDirectory()||lstatSync(directory).isSymbolicLink())refuse('receipt-custody');
+              syncDirectory(receiptRoot);
+              const file=join(directory,`${request.comment}.json`);
+              if(existsSync(file)){
+                if(!lstatSync(file).isFile()||lstatSync(file).size>65536)refuse('receipt-custody');
+                const prior=readJson(file);
+                if(prior.version!==1||binding(prior.request)!==binding(request))refuse('request-binding');
+                // Interrupted claims stay unresolved. Reporting can reconcile; admission cannot replay.
+                return report(prior,file,api);
+              }
+              const before=await head();if(!SHA.test(before??'')||!SHA.test(selectedHead??''))refuse('source-reading');
+              if(before!==selectedHead)refuse('current-main-changed');
+              const receipt={version:1,request,run:`https://github.com/${repository}/actions/runs/${runId}`,attempt:Number(runAttempt),before,state:'claimed'};
+              if(!claim(file,receipt))return {status:'reconciliation-required',workRef:request.workRef};
+              let result;
+              try{
+                const status=await advance();
+                let after=null;try{const observed=await head();if(SHA.test(observed??''))after=observed;}catch{}
+                result={status:status===0?(after?'procedure-succeeded':'procedure-succeeded-observation-unavailable'):Number.isInteger(status)?'procedure-failed-effects-unresolved':'procedure-outcome-unknown',after};
+              }catch{result={status:'procedure-outcome-unknown',after:null};}
+              receipt.state='finished';receipt.result=result;save(file,receipt);
+              return report(receipt,file,api);
+            }
+            
+            export function githubRequestApi(execute=spawnSync){
+              return async(method,path,body)=>{
+                let result;
+                try{result=execute('gh',['api','--hostname','github.com','--method',method,path,...(body?['--input','-']:[])],
+                  {encoding:'utf8',input:body?JSON.stringify(body):undefined,timeout:15000,maxBuffer:65536});}
+                catch{refuse('provider-unavailable');}
+                if(result.error||result.status!==0)refuse('provider-unavailable');
+                try{return JSON.parse(result.stdout);}catch{refuse('provider-reading');}
+              };
+            }
+            
+            if(isCliEntry(import.meta.url)){
+              try{
+                const [action,snapshotArg,workArg,serviceArg]=process.argv.slice(2);
+                const snapshot=resolve(snapshotArg),repository=process.env.GITHUB_REPOSITORY;
+                const commentMode=process.env.GITHUB_EVENT_NAME==='issue_comment'&&['authorize','execute'].includes(action);
+                const pushMode=process.env.GITHUB_EVENT_NAME==='push'&&['push-admission-mode','verify-projection','verify-controller'].includes(action);
+                if(!commentMode&&!pushMode)refuse('mode');
+                const config=readJson(join(snapshot,'machine.json'));
+                if(config.repository!==repository||!config.receiptRoot)refuse('machine');
+                const event=readJson(process.env.GITHUB_EVENT_PATH),api=githubRequestApi();
+                if(action==='push-admission-mode'){
+                  const git=args=>{const r=spawnSync('git',args,{cwd:snapshot,encoding:'utf8',timeout:15000,maxBuffer:65536});
+                    if(r.error||r.status!==0)refuse('source-reading');return r.stdout.trim();};
+                  process.stdout.write(pushAdmissionMode(event,repository,git(['rev-parse','HEAD']),git)+'\n');
+                }else if(action==='verify-projection'){
+                  if(!serviceArg)refuse('procedure');
+                  verifyRequestProjection(snapshot,resolve(serviceArg));
+                  process.stdout.write('Request projection matches the selected source owner.\n');
+                }else if(action==='verify-controller'){
+                  if(!serviceArg)refuse('procedure');
+                  process.stdout.write(JSON.stringify(qualifySelectedController(snapshot,resolve(serviceArg)))+'\n');
+                }else if(action==='authorize'){
+                  await authorizeReleaseRequest(event,repository,api);
+                  process.stdout.write('Release request repository-write authorization verified.\n');
+                }else{
+                  if(!workArg||!serviceArg)refuse('procedure');
+                  const work=resolve(workArg),service=resolve(serviceArg);
+                  const selected=spawnSync('git',['rev-parse','HEAD'],{cwd:snapshot,encoding:'utf8',timeout:15000,maxBuffer:65536});
+                  if(selected.error||selected.status!==0)refuse('source-reading');
+                  const result=await executeReleaseRequest({event,repository,runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,
+                    receiptRoot:config.receiptRoot,selectedHead:selected.stdout.trim(),api,
+                    head:async()=>{
+                      const r=spawnSync('git',['ls-remote','origin','refs/heads/main'],{cwd:snapshot,encoding:'utf8',timeout:15000,maxBuffer:65536});
+                      if(r.error||r.status!==0)refuse('source-reading');return r.stdout.trim().split(/\s+/)[0];
+                    },
+                    advance:async()=>spawnSync(process.execPath,[join(service,'scripts/advance-reviewed-sources.mjs'),snapshot,work,service],
+                      {cwd:snapshot,stdio:'inherit'}).status});
+                  process.stdout.write(JSON.stringify(result)+'\n');
+                  if(result.status!=='reported'||result.result!=='procedure-succeeded')process.exitCode=1;
+                }
+              }catch(error){
+                process.stderr.write(JSON.stringify({kind:'release-request-refusal',reason:error?.code==='RELEASE_REQUEST_REFUSED'?error.reason:'unavailable'})+'\n');
+                process.exitCode=1;
+              }
+            }
+          RELEASE_REQUEST_ENTRY: |
+            import {realpathSync} from 'node:fs';
+            import {pathToFileURL} from 'node:url';
+            
+            // Node's default ESM loader resolves the entry module through symlinks while
+            // argv[1] keeps the invoked carrier path. Compare that path's canonical URL.
+            // Missing/non-file entry arguments are ordinary imports, not CLI execution.
+            export function isCliEntry(moduleUrl, entry=process.argv[1]) {
+              if (typeof entry!=='string'||!entry) return false;
+              try { return moduleUrl===pathToFileURL(realpathSync(entry)).href; }
+              catch { return false; }
+            }
+          NODE_OPTIONS: --max-old-space-size=768
+          RELEASE_MODE: ${{ (github.event_name == 'schedule' || github.event_name == 'issue_comment') && 'advance' || github.event_name == 'pull_request' && 'build' || inputs.mode || 'deploy' }}
+        run: |
+          set -euo pipefail
+          # Source acquisition preflight (projected from guix-machine-release-service).
+          # Qualified frozen tooling and native retained-history custody; no metadata resolution.
+          # This prerequisite grants no release authority: exact main admission,
+          # frozen acquisition, assembly, probe, pre-activation and live receiving still govern.
+          case "${RELEASE_MODE:-}" in
+            rollback) ;;
+            build|deploy|check-failure|advance)
+              if [ ! -f "$GITHUB_WORKSPACE/sources.json" ] || [ ! -r "$GITHUB_WORKSPACE/sources.json" ] ||
+                 [ ! -f "$GITHUB_WORKSPACE/dependencies.lock.yaml" ] || [ ! -r "$GITHUB_WORKSPACE/dependencies.lock.yaml" ]; then
+                printf '%s\n' 'Frozen custody refused: source declarations are unreadable.' >&2; exit 1
+              fi
+              frozen_source_read=0
+              LC_ALL=C grep -Eqi -- 'sqlite|sql[.]js|@libsql' "$GITHUB_WORKSPACE/sources.json" "$GITHUB_WORKSPACE/dependencies.lock.yaml" || frozen_source_read=$?
+              case "$frozen_source_read" in
+                1) ;;
+                0) printf '%s\n' 'Frozen custody refused: SQLite is declared in source or dependency data.' >&2; exit 1 ;;
+                *) printf '%s\n' 'Frozen custody refused: source declarations could not be read.' >&2; exit 1 ;;
+              esac
+              ;;
+            *) printf '%s\n' 'Frozen custody refused: metadata resolution or unsupported release mode remains held.' >&2; exit 1 ;;
+          esac
+          # End source acquisition preflight.
+          # Source admission handoff (projected from guix-machine-release-service).
+          # The running workflow and current checkout must carry the same code.
+          admission_workflow_current() {
+            [[ "$GITHUB_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid workflow source identity.' >&2; return 1; }
+            if ! git cat-file -e "$GITHUB_WORKFLOW_SHA^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$GITHUB_WORKFLOW_SHA"
+            fi
+            admission_workflow_blob="$(git rev-parse "$GITHUB_WORKFLOW_SHA:.github/workflows/release.yml")"
+            admission_checkout_blob="$(git hash-object "$GITHUB_WORKSPACE/.github/workflows/release.yml")"
+            [ "$admission_workflow_blob" = "$admission_checkout_blob" ] || { echo 'Workflow source changed; refuse stale admission code.' >&2; return 1; }
+          }
+          admission_workflow_current
+          admission_runtime="$(mktemp -d "$RUNNER_TEMP/release-admission.XXXXXX")"
+          trap 'rm -rf -- "$admission_runtime"' EXIT
+          printf '%s' "$RELEASE_REQUEST_HANDLER" > "$admission_runtime/request-source-admission.mjs"
+          printf '%s' "$RELEASE_REQUEST_ENTRY" > "$admission_runtime/cli-entry.mjs"
+          unset RELEASE_REQUEST_HANDLER RELEASE_REQUEST_ENTRY
+          # Reject an unprivileged comment before maintenance or source effects.
+          if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
+            guix shell --rebuild-cache node -- node "$admission_runtime/request-source-admission.mjs" authorize "$GITHUB_WORKSPACE"
+          fi
+          # Keep the native builder schedulable alongside the retained runtime.
+          systemctl --user set-property --runtime github-cold-red-gate-cloud-build.service CPUWeight=1000
+          mkdir -p "$HOME/.cache/561-group"
+          exec 9>"$HOME/.cache/561-group/github-guix-build.lease"
+          flock --exclusive 9
+          # Registry cache pruning awaits a qualified non-SQLite package toolchain.
+          # A queued automatic release must still be the current approved snapshot.
+          # Keep receipt writes uninterrupted; discard superseded work at admission.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$RELEASE_MODE" = deploy ]; then
+            git fetch origin main
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse FETCH_HEAD)" ]; then
+              echo 'Snapshot superseded before build admission.'
+              exit 0
+            fi
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            release_pull_number="${{ github.event.pull_request.number }}"
+            # GraphQL, not the REST budget every agent on the account shares.
+            release_pull_admission="$(gh api graphql -f query='query($o:String!,$n:String!,$x:Int!){repository(owner:$o,name:$n){pullRequest(number:$x){state headRefOid}}}' -f o="${GITHUB_REPOSITORY%/*}" -f n="${GITHUB_REPOSITORY#*/}" -F x="$release_pull_number" --jq '(.data.repository.pullRequest.state|ascii_downcase) + " " + .data.repository.pullRequest.headRefOid')"
+            if [ "$release_pull_admission" != "open $(git rev-parse HEAD)" ]; then
+              echo 'Preview closed or superseded before build admission.'
+              exit 0
+            fi
+          fi
+          # Admission may wait behind a build. Read current main after the
+          # compute lease so an older queued event cannot repeatedly push stale pins.
+          if [ "$RELEASE_MODE" = advance ]; then
+            git fetch origin main
+            git checkout --detach FETCH_HEAD
+          fi
+          admission_workflow_current
+          export GITHUB_SHA="$(git rev-parse HEAD)"
+          # Controller bootstrap (projected from guix-machine-release-service scripts/controller-bootstrap.sh).
+          # Resolve the release controller from sources.json's explicit owner map and fetch exactly its pinned commit.
+          # Only reading the JSON needs a runtime (Node from Guix); every check and fetch is shell and git.
+          controller_pin="$(guix shell --rebuild-cache node -- node -e '
+            const spec = require("./sources.json"), name = "@red-cup-engineering/guix-machine-release-service";
+            const owner = (spec.owners || {})[name];
+            if (!owner || typeof owner.repository !== "string" || typeof owner.path !== "string") throw new Error("release controller needs an explicit repository/path owner");
+            const pinned = (spec.repositories || []).filter((source) => source && source.repository === owner.repository);
+            if (pinned.length !== 1) throw new Error("release controller needs exactly one pinned source");
+            if ([owner.repository, pinned[0].commit, owner.path].some((field) => typeof field !== "string" || /\s/u.test(field))) throw new Error("release controller fields must be single words");
+            console.log([owner.repository, pinned[0].commit, owner.path].join(" "));')"
+          read -r controller_repository controller_commit controller_path <<<"$controller_pin"
+          [[ "$controller_repository" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9_.-]+$ ]] || { echo 'invalid release controller repository' >&2; exit 1; }
+          [[ "$controller_commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'release controller needs an exact commit' >&2; exit 1; }
+          if [ "$controller_path" != . ]; then
+            [[ "$controller_path" =~ ^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$ && ! "/$controller_path/" =~ /\.\.?/ ]] || { echo 'release controller path must remain inside its repository' >&2; exit 1; }
+          fi
+          controller_git=(git -c credential.helper= -c 'credential.helper=!gh auth git-credential')
+          controller_root="$HOME/.cache/561-group/github-source-bootstrap/$GITHUB_REPOSITORY/$GITHUB_SHA/controller"
+          mkdir -p "$(dirname "$controller_root")"
+          [ -d "$controller_root/.git" ] || "${controller_git[@]}" clone -q --filter=blob:none --no-checkout "https://github.com/$controller_repository.git" "$controller_root"
+          "${controller_git[@]}" -C "$controller_root" fetch -q --depth=1 origin "$controller_commit"
+          if [ "$controller_path" = . ]; then git -C "$controller_root" sparse-checkout disable; else git -C "$controller_root" sparse-checkout set -- "$controller_path"; fi
+          git -C "$controller_root" checkout -q --detach "$controller_commit"
+          service="$(realpath "$controller_root/$controller_path")"
+          case "$service/" in "$(realpath "$controller_root")/"*) ;; *) echo 'release controller resolves outside its repository' >&2; exit 1;; esac
+          grep -Eq '"name": *"@red-cup-engineering/guix-machine-release-service"' "$service/package.json" || { echo 'selected source is not the release controller package' >&2; exit 1; }
+          echo "RELEASE_CONTROLLER=$service" >> "$GITHUB_ENV"; RELEASE_CONTROLLER="$service"
+          # End controller bootstrap.
+          work="$HOME/.cache/561-group/github-cold-red-gate-runs/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          # A functional handoff update must admit its reviewed owner before deployment.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$RELEASE_MODE" = deploy ]; then
+            admission_mode="$(guix shell --rebuild-cache node -- node "$admission_runtime/request-source-admission.mjs" push-admission-mode "$GITHUB_WORKSPACE")"
+            if [ "$admission_mode" = advance ]; then
+              admission_status=0
+              guix repl -- "$service/scripts/pinned-guix.scm" channels.scm shell guile guile-json node -- \
+                node "$service/scripts/advance-reviewed-sources.mjs" "$GITHUB_WORKSPACE" "$work" "$service" || admission_status=$?
+              git fetch origin main
+              if [ "$(git rev-parse HEAD)" != "$(git rev-parse FETCH_HEAD)" ]; then
+                echo 'Reviewed sources advanced; the successor snapshot owns deployment.'
+                exit "$admission_status"
+              fi
+              if [ "$admission_status" -ne 0 ]; then exit "$admission_status"; fi
+              # No successor: refuse an unadmitted projection instead of deploying an old provider.
+              guix shell --rebuild-cache node -- node "$admission_runtime/request-source-admission.mjs" verify-projection "$GITHUB_WORKSPACE" "$work" "$service"
+            fi
+            # A source/lock successor must also contain the qualified receiver, even if another provider alone advanced.
+            guix shell --rebuild-cache node -- node "$admission_runtime/request-source-admission.mjs" verify-controller "$GITHUB_WORKSPACE" "$work" "$service"
+          fi
+          if [ "$RELEASE_MODE" = advance ]; then
+            if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
+              # Fresh main was checked out under the shared compute lease above.
+              guix repl -- "$service/scripts/pinned-guix.scm" channels.scm shell guile guile-json node -- \
+                node "$admission_runtime/request-source-admission.mjs" execute "$GITHUB_WORKSPACE" "$work" "$service"
+            else
+            guix repl -- "$service/scripts/pinned-guix.scm" channels.scm shell guile guile-json node -- \
+              node "$service/scripts/advance-reviewed-sources.mjs" "$GITHUB_WORKSPACE" "$work" "$service"
+            fi
+          else
+            guix repl -- "$service/scripts/pinned-guix.scm" channels.scm shell guile guile-json node -- \
+              guile --no-auto-compile "$service/scripts/github-machine-release.scm" "$GITHUB_WORKSPACE" "$work" "$RELEASE_MODE"
+          fi
+      - name: Wake the owning website release after actual promotion
+        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')) }}
+        run: |
+          set -euo pipefail
+          admitted_head="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$admitted_head" != "$GITHUB_SHA" ]; then exit 0; fi
+          # Superseded snapshots also exit successfully; only a live matching
+          # artifact can wake publication. The website retains its own admission
+          # and exact content/evidence checks on the cloud runner.
+          live_release_match="$(guix shell --rebuild-cache node -- node "$RELEASE_CONTROLLER/scripts/live-release-matches.mjs" "$HOME/.local/share/561-group/releases/cold-red-gate.561.group/current" "$GITHUB_SHA" causeway-services/koios-news --report)" || {
+            live_release_status=$?
+            echo '::error::Website release wake could not verify the live artifact.' >&2
+            exit "$live_release_status"
+          }
+          case "$live_release_match" in
+            match) ;;
+            mismatch) exit 0 ;;
+            *) echo '::error::Website release wake received an invalid live-artifact result.' >&2; exit 1 ;;
+          esac
+          # Waking the website is best effort: the release already succeeded, and the site has its own schedule.
+          gh workflow run site.yml --repo causeway-services/koios-news --ref main || echo '::warning::the Koios website release was not woken; it publishes on its own schedule'
+      - name: Record the outcome for repository readers
+        if: always()
+        env:
+          JOB_OUTCOME: ${{ job.status }}
+        run: |
+          work="$HOME/.cache/561-group/github-cold-red-gate-runs/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -n "${RELEASE_CONTROLLER:-}" ]; then
+            guix shell --rebuild-cache node -- node "$RELEASE_CONTROLLER/scripts/record-outcome.mjs" "$work"
+          else
+            echo "Machine snapshot: \`$GITHUB_SHA\`; the release controller was not resolved, so no outcome was recorded." >> "$GITHUB_STEP_SUMMARY"
+          fi

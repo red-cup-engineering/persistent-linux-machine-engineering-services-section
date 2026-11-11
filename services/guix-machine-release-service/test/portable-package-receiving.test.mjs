@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync,renameSync,readdirSync} from 'node:fs';
+import {join,dirname,relative} from 'node:path';
+import {tmpdir} from 'node:os';
+import {packageReceivingChecks,manifestIdentity,sha256,gitBlobIdentity} from '../scripts/package-receiving.mjs';
+import {credentialDeclaration} from '../scripts/credential-unit-receiving.mjs';
+const name='@red-cup-engineering/credential-custody-service',commit='a'.repeat(40),repository='red-cup-engineering/example';
+function fixture(t,portable=true){
+ const outer=mkdtempSync(join(tmpdir(),'portable-receiving-'));t.after(()=>rmSync(outer,{recursive:true,force:true}));
+ const root=join(outer,'runtime');mkdirSync(root);
+ const put=(path,bytes)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),bytes);};
+ const installationPath=portable?'node_modules/.pnpm/provider/node_modules/'+name:'packages/'+name.replaceAll('/','__');
+ const manifest={name,version:'1.0.0',receivingTests:['test/receive.test.mjs']},bytes=Buffer.from('// inert receiving source, never invoked\n');
+ const provider={name,version:manifest.version,repository,commit,path:'source/provider',sourceManifestSha256:manifestIdentity(manifest),...(portable?{installationPath}:{}),receiving:{version:1,manifest,tests:[{path:'test/receive.test.mjs',sha256:sha256(bytes),gitBlob:gitBlobIdentity(bytes,'0'.repeat(40))}]}};
+ const sources={repositories:[{repository,commit}],packages:[provider],receivingPackages:[name]};
+ put(installationPath+'/package.json',JSON.stringify(manifest));put(installationPath+'/test/receive.test.mjs',bytes);put(installationPath+'/scripts/render-host.mjs','// inert renderer, never invoked\n');
+ const alias=join(root,'node_modules',name);mkdirSync(dirname(alias),{recursive:true});symlinkSync(relative(dirname(alias),join(root,installationPath)),alias);
+ put('.metadata/sources.json',JSON.stringify(sources));put('.controller/machine.json',JSON.stringify({unit:'main.service',auxiliaryUnits:['561-group-credentials.service']}));
+ put('.guix-systemd/561-group-credentials.service',`[Service]\nType=oneshot\nExecStart=/gnu/store/aaa-node/bin/node ${root}/node_modules/${name}/scripts/render-host.mjs\n`);put('.guix-systemd/main.service','Requires=561-group-credentials.service\nAfter=561-group-credentials.service\n');
+ return{root,outer,put,sources,provider,installationPath,alias};
+}
+test('portable receiving and credential alias join to the generated selected provider location',t=>{const f=fixture(t);const r=packageReceivingChecks(f.root,f.sources);assert.equal(r[0].directory,join(f.root,f.installationPath));assert.equal(credentialDeclaration(f.root).renderer.path,'source/provider/scripts/render-host.mjs');});
+test('legacy package layout remains accepted by both receivers',t=>{const f=fixture(t,false);assert.equal(packageReceivingChecks(f.root,f.sources).length,1);assert.equal(credentialDeclaration(f.root).renderer.commit,commit);});
+test('sealed portable carrier retains one admitted runtime boundary',t=>{const f=fixture(t),sealed=join(f.outer,'sealed');mkdirSync(sealed);for(const p of readdirSync(f.root))symlinkSync(join(f.root,p),join(sealed,p));assert.equal(packageReceivingChecks(sealed,f.sources)[0].directory,join(f.root,f.installationPath));});
+test('canonical installation paths refuse escapes and aliases before reading another provider',t=>{const f=fixture(t);for(const path of ['../outside','/tmp/else','node_modules/../outside','node_modules//x','node_modules/./x','node_modules\\x','']){f.provider.installationPath=path;assert.throws(()=>packageReceivingChecks(f.root,f.sources),/canonical/);}});
+test('selected installation directory cannot itself redirect',t=>{const f=fixture(t),actual=join(f.root,f.installationPath),outside=join(f.outer,'outside');renameSync(actual,outside);symlinkSync(outside,actual);assert.throws(()=>packageReceivingChecks(f.root,f.sources),/redirected/);});
+test('root package alias must equal the selected provider, even when both manifests match',t=>{const f=fixture(t);const other='other-provider';f.put(other+'/package.json',JSON.stringify(f.provider.receiving.manifest));rmSync(f.alias);symlinkSync(join(f.root,other),f.alias);assert.throws(()=>packageReceivingChecks(f.root,f.sources),/alias differs/);assert.throws(()=>credentialDeclaration(f.root),/alias differs/);});
+test('credential source file redirection is refused without executing anything',t=>{const f=fixture(t),file=join(f.root,f.installationPath,'scripts/render-host.mjs'),outside=join(f.outer,'renderer');writeFileSync(outside,'// same inert bytes\n');rmSync(file);symlinkSync(outside,file);assert.throws(()=>credentialDeclaration(f.root),/regular file without symlinks/);});
+test('duplicate selected providers and changed test bytes remain refusals',t=>{const f=fixture(t);f.sources.packages.push({...f.provider});assert.throws(()=>packageReceivingChecks(f.root,f.sources),/uniquely admitted/);f.sources.packages.pop();f.put(f.installationPath+'/test/receive.test.mjs','changed');assert.throws(()=>packageReceivingChecks(f.root,f.sources),/test bytes differ/);});

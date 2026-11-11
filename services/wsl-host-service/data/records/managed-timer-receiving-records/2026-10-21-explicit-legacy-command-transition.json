@@ -1,0 +1,48 @@
+{
+  "schema": "wsl.managed-timer.independent-transition-component-receiving/1",
+  "verdict": "MET_CHANGED_SOURCE_NATIVE_OWNER_MODULE_AND_LOCAL_ARCHIVE",
+  "originalWork": "https://github.com/coesite-operations/operations-services-section/issues/10",
+  "sourceProposal": "https://github.com/red-cup-engineering/wsl-host-service/pull/2",
+  "version": "0.2.1",
+  "reviewer": "independent parent engineering source receiver; no machine admission inferred",
+  "evidence": [
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/durable-owned-monitor-logs/2026-10-21-source-v1/legacy-command-transition-v2/source-and-effects-proposal.json",
+      "sha256": "f9b6ceff32392ff088d89cf918c25378529625519ca66570fb7a908288fce60f"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/durable-owned-monitor-logs/2026-10-21-source-v1/legacy-command-transition-v2/source.diff",
+      "sha256": "372efd347f7007adf8227fb685d34a4e0faf1eee02b54ce8c4257103482ce7c0"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/durable-owned-monitor-logs/2026-10-21-source-v1/legacy-command-transition-v2/whole-module-receiving-index.json",
+      "sha256": "f35e5b6b95eab560c418b6295d5e6cd8f4786236221d5fe88e14766c77e5351f"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/durable-owned-monitor-logs/2026-10-21-source-v1/legacy-command-transition-v2/final-source-native-packed-index.json",
+      "sha256": "af489d264efbcf0dc794691e0132fc32530427e7094cc81cff54a49863e610b2"
+    }
+  ],
+  "inspection": {
+    "wholeAffectedOriginalModule": 17,
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "todo": 0,
+    "stderrBytes": 0,
+    "nativeCasesMilliseconds": 125.83,
+    "actualNativeScopes": "inactive/dead/empty",
+    "ownerModuleCarriersIndependentlyHashed": 10,
+    "finalPacketCarriersIndependentlyHashed": 23,
+    "localArchiveBytes": 42528,
+    "archiveMembers": 14,
+    "actualPublicArchiveCLI": {
+      "firstWritten": 2,
+      "secondWritten": 0,
+      "commands": 0
+    }
+  },
+  "received": "Optional expectedLegacyCommand separately binds the old transient user producer and new target command. Omitted field retains original same-command behavior. Actual preflight and fresh pre-stop service/timer checks refuse changed argv or persistent fragments, including identical-argv races. Original affected module passed without omissions. Original public Code pack produced the changed exact artifact and its actual public CLI staged the declared two files idempotently.",
+  "remaining": "Forward exact source on original PR2, current source integration and immutable registry publication, final BCF declared input receiving, native privilege/manager/old-scope checks, original producer handover and subsequent actual six-owner pulse/use. Local archive and fixtures do not claim live installation or deployment. Original60 and parser receipts remain historical evidence; no current full63 rerun claimed."
+}

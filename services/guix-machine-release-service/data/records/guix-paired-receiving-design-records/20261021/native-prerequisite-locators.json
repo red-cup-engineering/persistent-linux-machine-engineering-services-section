@@ -1,0 +1,57 @@
+{
+  "kind": "RetainedNativeSupplierLocatorsForDesignOnly",
+  "files": [
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/npm-services-section/services/npm-registry-services-section/data/state/npm-artifact-receiving-state/20261020-code22-frozen-recipient/consumer/node_modules/.pnpm/@red-cup-engineering+npm-workspace-publication-service@0.14.24/node_modules/@red-cup-engineering/npm-workspace-publication-service/package.json",
+      "sha256": "a1a795a4031ba628e1d2b6785d64baaacfb06ed86e76b0d1e8e4ca885945a939",
+      "bytes": 6933
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/npm-services-section/services/npm-registry-services-section/data/state/npm-artifact-receiving-state/20261020-code22-frozen-recipient/consumer/node_modules/.pnpm/@red-cup-engineering+npm-workspace-publication-service@0.14.24/node_modules/@red-cup-engineering/npm-workspace-publication-service/src/source-registry-closure.mjs",
+      "sha256": "a358064e1c7a726441dc37ecbe2836721ca1b0a0eb077b169fc3dc1d8d30ace8",
+      "bytes": 42660
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/npm-services-section/services/npm-registry-services-section/data/state/npm-artifact-receiving-state/20261020-code22-frozen-recipient/consumer/node_modules/.pnpm/@red-cup-engineering+npm-workspace-publication-service@0.14.24/node_modules/@red-cup-engineering/npm-workspace-publication-service/src/produce-registry-runtime.mjs",
+      "sha256": "d27fd0b952a25063308f7610db9e6b4facbfb13503a98e115af9510c2a12d3dd",
+      "bytes": 8316
+    },
+    {
+      "path": "/gnu/store/4g31m3fhqbkn0md9hnzfliq997j7fgpk-guix-command",
+      "sha256": "5533b8fd9fc23027f67cb07e7d25307c2d7e0d998d72f6b9ac7450a725671296",
+      "bytes": 1256
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/data/records/computer-deployment-source-qualification-records/2026-10-20-native-recovery/cde-0.3.4-qualified-supplier.json",
+      "sha256": "8261fd7170c6c3a7ba12d45cd9e303a67102daeee75b32a4032b14839a4feb98",
+      "bytes": 4861
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/data/records/computer-deployment-source-qualification-records/2026-10-20-native-recovery/cde-0.3.4-native-lifecycle-storage-plan.v3.json",
+      "sha256": "05db368a59d8de3bec439eb1132c21aa4fc011392b45a02557512c9eaf7b7a71",
+      "bytes": 11578
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/data/records/computer-deployment-source-qualification-records/2026-10-20-native-recovery/cde-0.4.1-source-proposal.json",
+      "sha256": "9df8a1754fc747f309c33527969d055e70598f76a5f4a6c3153c1c04a8094f26",
+      "bytes": 2498
+    },
+    {
+      "path": "/var/tmp/engineering-abandoned-prs-20261020/deployment-intake/cde-computed-storage-plan.v4.json",
+      "sha256": "4c9b16f025b29626029dd5baac3fbce4a8456cda415269c581a3a1fd3a962c1f",
+      "bytes": 19184
+    }
+  ],
+  "registeredNativeGuix": {
+    "command": "/gnu/store/4g31m3fhqbkn0md9hnzfliq997j7fgpk-guix-command",
+    "sha256": "5533b8fd9fc23027f67cb07e7d25307c2d7e0d998d72f6b9ac7450a725671296",
+    "guile": "/gnu/store/k7vkw9x3wl3lni6a0i2w8xz2z8ylrqyz-guile-3.0.11",
+    "modules": "/gnu/store/ww9rn6cywkhdrh602gg0jckyxj025gzr-guix-module-union",
+    "status": "Exact retained nativeQAselectedwrapper read/hash; no new invocation or channel-equivalence proof"
+  },
+  "codeNativePackage": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/npm-services-section/services/npm-registry-services-section/data/state/npm-artifact-receiving-state/20261020-code22-frozen-recipient/consumer/node_modules/.pnpm/@red-cup-engineering+npm-workspace-publication-service@0.14.24/node_modules/@red-cup-engineering/npm-workspace-publication-service",
+  "codeVersion": "0.14.24",
+  "sourceRegistryAPIByteIdenticalToCandidate": true,
+  "runtimeAPIByteIdenticalToCandidate": true,
+  "executed": false
+}

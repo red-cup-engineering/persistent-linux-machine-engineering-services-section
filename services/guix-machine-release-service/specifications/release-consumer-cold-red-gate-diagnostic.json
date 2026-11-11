@@ -1,0 +1,41 @@
+{
+  "kind": "guix.release-consumer-binding.v2",
+  "workflow": ".github/workflows/release.yml",
+  "actor": "emsenn",
+  "lease": ".cache/561-group/github-guix-build.lease",
+  "defaultMode": "build",
+  "channelsBlob": "be2ad3e698618dc916fe126880b6ed9573ee1bb3",
+  "repository": "561-group/cold-red-gate",
+  "repositoryId": 1408796038,
+  "definition": ".",
+  "runner": [
+    "self-hosted",
+    "Linux",
+    "X64",
+    "guix",
+    "cold-red-gate-build"
+  ],
+  "concurrency": "cold-red-gate-guix",
+  "runDirectory": ".cache/561-group/github-cold-red-gate-runs",
+  "events": [
+    "push",
+    "pull_request",
+    "workflow_dispatch",
+    "issue_comment"
+  ],
+  "modes": [
+    "build"
+  ],
+  "sourcePolicy": "refuse-declared-sql-before-bootstrap-v1",
+  "activationHeld": true,
+  "effects": {
+    "deinitializeSubmodules": false,
+    "prepareBuildSwap": false,
+    "queuedHeadCheck": true,
+    "rebuildOutcomeCache": true,
+    "cpuWeight": {
+      "unit": "github-cold-red-gate-cloud-build.service",
+      "weight": 1000
+    }
+  }
+}

@@ -1,0 +1,55 @@
+# Read-only sealed-target check
+
+Guix machine-change comparison needs to read the target binding of each completed
+LAGOON product without invoking deployment. The existing receiving predicate is
+the owner of that binding; consumers must not duplicate it or infer binding from
+a store path or a target name. This increment exposes that predicate, subordinate
+to Guix#101 and Bare Cedar Fog#765. It does not complete their source admission or
+paired comparison stages.
+
+The command is `check-target CHANNELS STORE PROFILE TARGET`. CHANNELS must be
+previously authenticated trusted channel code, as for the receiving entrance.
+The existing current-pinned-guix evaluates that Scheme file: this operation is
+not a sandbox for untrusted code. The caller must establish that the channel file
+has no side effects or stdout output. The no-effects and JSON guarantees below
+cover LAGOON operations under this prerequisite, not arbitrary Scheme execution.
+CHANNELS must match
+the complete channel name/commit list of the already running imported Guix.
+STORE must be an exact registered, canonical top-level native store directory.
+PROFILE is an absolute path equal to the sealed declaration. TARGET is the
+existing cold-red-gate or bare-cedar-fog family. Registration is checked before
+and after reading; missing, redirected or inconsistent declarations refuse.
+
+Use the same check-receiving-target implementation as receive and target-aware
+rollback: canonical regular declaration files, main unit, enterprise host kind,
+instance identity, executable/environment binding and the existing CRG supported
+role predicate. Preserve its actor-only/worker acceptance. This command does not
+change the separate actor-only receiving requirements described in the runbook.
+
+On success, emit one JSON object containing store, profile, target, mainUnit,
+hostKind, instanceId and executionRole (null if absent for BCF). These are observed
+facts, not an admission certificate. Errors exit nonzero with no success JSON.
+Unknown arguments refuse. The command must bypass the profile-mutation/lease
+entrance and must never build, call time-machine, create profile directories,
+retain roots, install artifacts, activate services, inspect live host health,
+remove retained data or mutate the host. The caller holds its output through its
+existing build root; concurrent collection can cause refusal.
+
+Implement in the existing Guile driver using its Guix store and JSON suppliers.
+Keep the shared predicate and read-only registered-store boundary separate from
+CLI dispatch. Existing receive/rollback effects and acceptance stay unchanged.
+No new supplier, resolver, release selector or provenance schema is introduced.
+
+Source-owned qualification exercises real declaration files for both targets and
+preserved CRG roles; invalid paths, redirected/missing files and inconsistent
+profile/identity/unit/environment/role refuse. Test registration loss, unmatched
+Guix, exact CLI grammar, JSON output and effect canaries. Guix registration may
+be substituted only in these isolated fixtures; fixture success is not a native
+store or installed-consumer receipt. Run existing native transaction regression
+suites to preserve receiving behavior. No test may activate a real target.
+
+Before Guix can report a machine comparison, it still needs admitted exact source
+and registry/lock/runtime provenance for both products, the actual immutable
+construction results, original obligations and measured receiving. This command
+supplies only the product target readback stage. Source push, tests and JSON
+facts cannot stand in for those prerequisites or production receiving.

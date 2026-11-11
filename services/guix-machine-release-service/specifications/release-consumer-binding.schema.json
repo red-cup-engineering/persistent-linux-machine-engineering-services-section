@@ -1,0 +1,394 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Committed Guix release consumer binding v2",
+  "description": "Explicit consumer-owned immutable data selects closed owner effects. No machine catalog, shell, arbitrary operation, runtime bypass or deployment default. Generated run bodies must fit the owner 21000-character limit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "repository",
+    "repositoryId",
+    "definition",
+    "workflow",
+    "actor",
+    "channelsBlob",
+    "runner",
+    "lease",
+    "concurrency",
+    "runDirectory",
+    "events",
+    "modes",
+    "defaultMode",
+    "sourcePolicy",
+    "activationHeld",
+    "effects"
+  ],
+  "properties": {
+    "kind": {
+      "const": "guix.release-consumer-binding.v2"
+    },
+    "repository": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+          }
+        }
+      ]
+    },
+    "repositoryId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "definition": {
+      "oneOf": [
+        {
+          "const": "."
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+          "not": {
+            "pattern": "(^|/)([.]|[.][.]|[.]git)(/|$)"
+          },
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "workflow": {
+      "const": ".github/workflows/release.yml"
+    },
+    "actor": {
+      "type": "string",
+      "maxLength": 39,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+          }
+        }
+      ]
+    },
+    "channelsBlob": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$",
+      "not": {
+        "const": "0000000000000000000000000000000000000000"
+      },
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+          }
+        }
+      ],
+      "minLength": 40,
+      "maxLength": 40
+    },
+    "runner": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "prefixItems": [
+        {
+          "const": "self-hosted"
+        },
+        {
+          "const": "Linux"
+        },
+        {
+          "const": "X64"
+        },
+        {
+          "const": "guix"
+        }
+      ],
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "allOf": [
+          {
+            "not": {
+              "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+            }
+          }
+        ]
+      }
+    },
+    "lease": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[.]cache/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[.]lease$",
+      "not": {
+        "pattern": "(^|/)([.]|[.][.]|[.]git)(/|$)"
+      },
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+          }
+        }
+      ]
+    },
+    "concurrency": {
+      "type": "string",
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+          }
+        }
+      ]
+    },
+    "runDirectory": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[.]cache/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+      "not": {
+        "pattern": "(^|/)([.]|[.][.]|[.]git)(/|$)"
+      },
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+          }
+        }
+      ]
+    },
+    "events": {
+      "enum": [
+        [
+          "push",
+          "workflow_dispatch"
+        ],
+        [
+          "push",
+          "workflow_dispatch",
+          "issue_comment"
+        ],
+        [
+          "push",
+          "pull_request",
+          "workflow_dispatch"
+        ],
+        [
+          "push",
+          "pull_request",
+          "workflow_dispatch",
+          "issue_comment"
+        ]
+      ]
+    },
+    "modes": {
+      "enum": [
+        [
+          "build"
+        ],
+        [
+          "build",
+          "rollback"
+        ],
+        [
+          "build",
+          "check-failure"
+        ],
+        [
+          "build",
+          "check-failure",
+          "rollback"
+        ],
+        [
+          "build",
+          "deploy"
+        ],
+        [
+          "build",
+          "deploy",
+          "rollback"
+        ],
+        [
+          "build",
+          "deploy",
+          "check-failure"
+        ],
+        [
+          "build",
+          "deploy",
+          "check-failure",
+          "rollback"
+        ]
+      ]
+    },
+    "defaultMode": {
+      "const": "build"
+    },
+    "sourcePolicy": {
+      "enum": [
+        "controller-admission-v1",
+        "refuse-declared-sql-before-bootstrap-v1"
+      ]
+    },
+    "activationHeld": {
+      "type": "boolean"
+    },
+    "effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deinitializeSubmodules",
+        "prepareBuildSwap",
+        "queuedHeadCheck",
+        "rebuildOutcomeCache",
+        "cpuWeight"
+      ],
+      "properties": {
+        "deinitializeSubmodules": {
+          "type": "boolean"
+        },
+        "prepareBuildSwap": {
+          "type": "boolean"
+        },
+        "queuedHeadCheck": {
+          "type": "boolean"
+        },
+        "rebuildOutcomeCache": {
+          "type": "boolean"
+        },
+        "cpuWeight": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "unit",
+                "weight"
+              ],
+              "properties": {
+                "unit": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]*[.]service$",
+                  "allOf": [
+                    {
+                      "not": {
+                        "pattern": "[\\u0000-\\u001f\\u007f\\u2028\\u2029]"
+                      }
+                    }
+                  ]
+                },
+                "weight": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "nativeController": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "commit",
+        "tree"
+      ],
+      "properties": {
+        "repository": {
+          "const": "red-cup-engineering/guix-machine-release-service"
+        },
+        "commit": {
+          "$ref": "#/properties/channelsBlob"
+        },
+        "tree": {
+          "$ref": "#/properties/channelsBlob"
+        }
+      }
+    },
+    "nativeInputs": {
+      "enum": [
+        [
+          "GUIX_COMMON_ASSEMBLY_RECEIPT",
+          "GUIX_COMMON_SOFTWARE_RECEIPT",
+          "GUIX_COMMON_SOURCE_SNAPSHOT"
+        ],
+        [
+          "GUIX_COMMON_ASSEMBLY_RECEIPT",
+          "GUIX_COMMON_SOFTWARE_RECEIPT",
+          "GUIX_COMMON_SOURCE_SNAPSHOT",
+          "GUIX_ONE_TIME_CUSTODY_SOURCE"
+        ]
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "activationHeld": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "modes": {
+            "const": [
+              "build"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "nativeController"
+        ]
+      },
+      "then": {
+        "properties": {
+          "effects": {
+            "properties": {
+              "deinitializeSubmodules": {
+                "const": false
+              },
+              "prepareBuildSwap": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "dependentRequired": {
+    "nativeController": [
+      "nativeInputs"
+    ],
+    "nativeInputs": [
+      "nativeController"
+    ]
+  }
+}

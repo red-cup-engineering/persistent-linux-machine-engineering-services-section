@@ -1,0 +1,105 @@
+{
+  "kind": "OriginalGuix149150CDE13BoundedReadOnlyIntake",
+  "owner": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service",
+  "primaryBytes": 256359,
+  "captures": [
+    {
+      "name": "guix-pr149",
+      "endpoint": "repos/red-cup-engineering/guix-machine-release-service/pulls/149",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix-pr149.json",
+      "sha256": "199f7985a81e2d2fe426c084abb8233d2bab5c3ac0d41cf357146fbaf66a25c3",
+      "bytes": 23281
+    },
+    {
+      "name": "guix-pr150",
+      "endpoint": "repos/red-cup-engineering/guix-machine-release-service/pulls/150",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix-pr150.json",
+      "sha256": "fe84c0dd5d325700c63078374365525d9d2acf4ac83abebc7b332db80d778745",
+      "bytes": 21884
+    },
+    {
+      "name": "cde-pr13",
+      "endpoint": "repos/red-cup-engineering/computer-deployment-engine/pulls/13",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/cde-pr13.json",
+      "sha256": "ddb1a73bcafa4e85d39ada510bbbcf17f59d7722c4e2a6af2a5ebb7d3d8ec89e",
+      "bytes": 24198
+    },
+    {
+      "name": "cde-pr13-comments",
+      "endpoint": "repos/red-cup-engineering/computer-deployment-engine/issues/13/comments",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/cde-pr13-comments.json",
+      "sha256": "3d1abd981736884d8176ce96812aee68e6c8c11bd2aff6ec44d5e077cf0fa5da",
+      "bytes": 9596
+    },
+    {
+      "name": "guix149-registry-spec",
+      "endpoint": "repos/red-cup-engineering/guix-machine-release-service/contents/specifications/candidate-toolchain-qualification.md?ref=e840d63cfbdcff09eab07f68937ce0114efc4920",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix149-registry-spec.json",
+      "sha256": "c3c8b379b9a84e6a718a5b172091c34f5bc20a5e3aa0a1b60b36aa4ab9152dcb",
+      "bytes": 84504,
+      "source": {
+        "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix149-registry-spec.raw",
+        "sha256": "4009d5c16dd9f4199db83e5e87bbcd33f8e6298ea9c4e241f81627707e033f0c",
+        "gitBlob": "01f306677ab2ed3735359dd20a8d495296e2b17a",
+        "bytes": 60259
+      }
+    },
+    {
+      "name": "cde13-check-target-spec",
+      "endpoint": "repos/red-cup-engineering/computer-deployment-engine/contents/content/text/documents/specifications/read-only-target-check.md?ref=1f94535017573c8c6fcb789d7e9d2f3df0372915",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/cde13-check-target-spec.json",
+      "sha256": "4ce418956cb69daca8fc4825a546bf221a2b3377ac8718473cf6998894373fdf",
+      "bytes": 6532,
+      "source": {
+        "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/cde13-check-target-spec.raw",
+        "sha256": "82f0dd472b87070cdba8f7965251efe707fcaece8e51bb5fa7942b468baee4aa",
+        "gitBlob": "35b7168436283d1093180c85ecbf0f8b2b48cfb6",
+        "bytes": 3635
+      }
+    },
+    {
+      "name": "guix149-native-receiver",
+      "endpoint": "repos/red-cup-engineering/guix-machine-release-service/contents/scripts/receive-pull-requests.mjs?ref=e840d63cfbdcff09eab07f68937ce0114efc4920",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix149-native-receiver.json",
+      "sha256": "cb84831b7c5a23d7d95d5af58702b22580a5c1d1ce3c99b2c1fc1447decb384d",
+      "bytes": 50809,
+      "source": {
+        "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix149-native-receiver.raw",
+        "sha256": "27db5eecbfdc209ac6a82482f0d46c59f6658fe6449770fafdea32d7f19445ac",
+        "gitBlob": "9a6fdc38620aa96c7fd8ac19970cadb9f393607e",
+        "bytes": 35891
+      }
+    },
+    {
+      "name": "guix149-consumer-identity",
+      "endpoint": "repos/red-cup-engineering/guix-machine-release-service/contents/scripts/source-pins.mjs?ref=e840d63cfbdcff09eab07f68937ce0114efc4920",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix149-consumer-identity.json",
+      "sha256": "666ab39536d31b491f2d5dbc91dd7742c2cf9adacf98f478d304923c27927d75",
+      "bytes": 30329,
+      "source": {
+        "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix149-consumer-identity.raw",
+        "sha256": "d19dabeb9548a0d32ed6c11819908e9d032171361e341ed3758e245de2f9cd84",
+        "gitBlob": "cf467e74e0b7ec85481d0b7eec780d50cfb9f603",
+        "bytes": 21077
+      }
+    },
+    {
+      "name": "guix-main-toolchain",
+      "endpoint": "repos/red-cup-engineering/guix-machine-release-service/contents/scripts/qualify-toolchain.mjs?ref=c54c65064e678963c00e36edcded771ac473988c",
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix-main-toolchain.json",
+      "sha256": "ced15efb95366b107e3b43a8d240b37fd16fa5920334deceab9759900d9a14ef",
+      "bytes": 5226,
+      "source": {
+        "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/logs/guix-paired-receiving-intake-logs/20261021/guix-main-toolchain.raw",
+        "sha256": "710e068423fe9b19f9d94447604a95c2b7168d5d3b04f18a672cd9ee87c7e0e5",
+        "gitBlob": "32527abcc48473a256d0a1597f6c5bf878887a35",
+        "bytes": 2828
+      }
+    }
+  ],
+  "sourceFabricated": false,
+  "testsRun": false,
+  "buildsRun": false,
+  "bindingsChanged": false,
+  "hostEffects": false
+}

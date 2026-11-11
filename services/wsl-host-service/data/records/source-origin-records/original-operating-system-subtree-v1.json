@@ -1,0 +1,137 @@
+{
+  "type": "StandaloneWslHostSourceOrigin",
+  "version": 1,
+  "original": {
+    "repository": "red-cup-engineering/computer-operating-system-services-section",
+    "commit": "98092c2140e3db61b1efe32372af12494a15572b",
+    "subtree": "4a5861dd1f5772adb768da8ab68a3244a4d6d3ba",
+    "history": "https://github.com/red-cup-engineering/computer-operating-system-services-section/tree/98092c2140e3db61b1efe32372af12494a15572b/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service"
+  },
+  "dedicated": {
+    "id": 1427823322,
+    "fullName": "red-cup-engineering/wsl-host-service",
+    "private": true,
+    "url": "https://github.com/red-cup-engineering/wsl-host-service",
+    "commit": "9a9ad58f7f4ad2865f32b906a78e543fcc2a9d3f",
+    "tree": "4a5861dd1f5772adb768da8ab68a3244a4d6d3ba"
+  },
+  "originalFiles": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "gitBlob": "8f7562573833a5ebce78458689a301463fde86ca",
+      "bytes": 1056,
+      "sha256": "ff8ecd057d5b05aa7d27fa1a87cbf15d0c52a38a8c1d1a853c6756ce9f444dac"
+    },
+    {
+      "path": "assets/observe-backing-capacity.ps1",
+      "mode": "100644",
+      "gitBlob": "c24a74ec0f4ec30cc8023404b90fed5fe644a7d8",
+      "bytes": 2266,
+      "sha256": "4c2cf7a9818943c8adf166cc1b5af6d28037b88617d6426ee2c95d6b9a079e70"
+    },
+    {
+      "path": "assets/wsl-agent-limits.sh",
+      "mode": "100755",
+      "gitBlob": "8b6ac7e2680eb37423f107af9eb700275ce65397",
+      "bytes": 985,
+      "sha256": "b0f7e38dbd52636b05a2f71b9342d026983b43ccc2e93e9a524e64e2bb7ed3fa"
+    },
+    {
+      "path": "assets/wsl-hvsock-headroom-guard.sh",
+      "mode": "100755",
+      "gitBlob": "31469e7da8d6dc16e095a0a7deb11d5f1bd1adc2",
+      "bytes": 3380,
+      "sha256": "ce79564f30d1b88a06421071973a75a8fc3705ad160f80983008a870778828c7"
+    },
+    {
+      "path": "assets/wsl-orphan-relay-reaper.sh",
+      "mode": "100755",
+      "gitBlob": "5f028df7bc707dea901ab326a43ac56cabfebc5f",
+      "bytes": 1608,
+      "sha256": "25e9d653ced82484099f2d67a837a6a0238ae982475f5a9fe8108b83189729ca"
+    },
+    {
+      "path": "assets/wsl-zram-swap.sh",
+      "mode": "100755",
+      "gitBlob": "d7d26036d7651d2623344d03914a02292db4af82",
+      "bytes": 891,
+      "sha256": "7b4807b01625f5522ce1fee4d3b06aa69ab1a17b30e7f6d2783855aab22f84c1"
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "gitBlob": "e210dbf31fe6eaa4f030d9a998b6eee0ed2dc98f",
+      "bytes": 799,
+      "sha256": "a21cb2ad80b64d6125e5f1665eb5360eea2d525052f780298f713aae906c67cf"
+    },
+    {
+      "path": "scripts/wsl-host.mjs",
+      "mode": "100755",
+      "gitBlob": "38429d44ff8937917012de598ff027be970aa906",
+      "bytes": 5149,
+      "sha256": "73949389dabb8c91b7670c22c8f2f7f2985b67f38f9386629ff2b73c012ee53b"
+    },
+    {
+      "path": "specifications/design.md",
+      "mode": "100644",
+      "gitBlob": "51d921231d8329e887f670922c42dba56075c2b2",
+      "bytes": 22484,
+      "sha256": "43a497701c9b06f4281178509b2482b0f898a32bbbbd6f75a8125da426f85a56"
+    },
+    {
+      "path": "specifications/requirements.md",
+      "mode": "100644",
+      "gitBlob": "143f5778d0be814da8d781bf0cfdb0aa3e1d1d26",
+      "bytes": 10961,
+      "sha256": "8644e26051f5392f73a9a590030171ff5d5ffb71d55a769fe55440de276350d8"
+    },
+    {
+      "path": "src/backing-capacity.mjs",
+      "mode": "100644",
+      "gitBlob": "892d183371528bb1cb3bd95e3d0405ee7b40f16f",
+      "bytes": 10653,
+      "sha256": "5b04c9ba24a611a62fa13a1a11de0ce7ed25ada22463e86b3b1983767a586c01"
+    },
+    {
+      "path": "src/user-unit-quarantine.mjs",
+      "mode": "100644",
+      "gitBlob": "7f134916fe1ad79ab635207e3ee99bb705a8c601",
+      "bytes": 12682,
+      "sha256": "a8ce4124df33a0ec4bcfdff1a29a1db65e3a535a30ee4ea64faa6d9f118890b0"
+    },
+    {
+      "path": "src/wsl-host.mjs",
+      "mode": "100644",
+      "gitBlob": "bd46a2ec4d530ba86175f453ba9ac9d4b390b197",
+      "bytes": 17994,
+      "sha256": "755478f1da2001991c6ae6501da096ee3881dc060860ab1d0f3d83e17f51becd"
+    },
+    {
+      "path": "test/backing-capacity.test.mjs",
+      "mode": "100644",
+      "gitBlob": "ee79b27c006b5d46e6541a4179d2a939dc496f4b",
+      "bytes": 11323,
+      "sha256": "0ac93905369a60a0b8bd68e22a1dd10a90191fa69f0d3709ddb9b2bc93cf59ce"
+    },
+    {
+      "path": "test/user-unit-quarantine.test.mjs",
+      "mode": "100644",
+      "gitBlob": "e8d9c2e2fd9fc9f328743f1491a472b0ff14d267",
+      "bytes": 7537,
+      "sha256": "4318343a96192de0434e5a12ad810d0e3d6f4a31c1b9b484d9326032ee17f64c"
+    },
+    {
+      "path": "test/wsl-host.test.mjs",
+      "mode": "100644",
+      "gitBlob": "759a7e252ce5202826e1957d1784f8ae7f5490e2",
+      "bytes": 9383,
+      "sha256": "2ba198845da527b300e1e8c61401a0eaeae14b0a9cda3539db5d1468b22d21cb"
+    }
+  ],
+  "receiving": "All sixteen original file bytes and Git modes retained; exact standalone root tree equals original subtree",
+  "limits": [
+    "Source import only; no native maintenance, registry publication, deployment or host migration admitted",
+    "Parent source projection must be received separately; original history is retained"
+  ]
+}

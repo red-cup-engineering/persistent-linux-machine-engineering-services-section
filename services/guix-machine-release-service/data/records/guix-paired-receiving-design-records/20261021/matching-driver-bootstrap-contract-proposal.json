@@ -1,0 +1,29 @@
+{
+  "kind": "OriginalGuixMatchingDriverBootstrapContractRefinement",
+  "status": "independent-original-contract-reconciliation-required-before-construction",
+  "at": "2026-10-21T05:25:44.977706+00:00",
+  "proposal": {
+    "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/matching-driver-bootstrap-contract-refinement.md",
+    "sha256": "e127f07668e1f01953a1b81abce2805b4f617540ce899f1f2a46057ec9a7c662",
+    "bytes": 9333
+  },
+  "originalInputs": [
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/primary-intake-custody.json",
+      "sha256": "fe8217d36d3d7d20f8133e02f2e0b7161c497d03533fefb2610ac8194cf94fae"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/native-prerequisite-locators.json",
+      "sha256": "87d908d069270cb75a27b33a6b8db473245327f118e75560b3fd191efe71010e"
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/guix-machine-release-service/data/records/guix-paired-receiving-design-records/20261021/paired-registry-receiving-design-proposal.json",
+      "sha256": "3b763cec1dd9f2420a5e9fb235efcbaa8e892f46697db2a0d0e1aa244fc45264"
+    }
+  ],
+  "CDECurrentActualAccepted": "ce00c740fbbd42cfa9b027f8b28aead571641c41",
+  "machineGateWaived": false,
+  "baselineConstructorReplaced": false,
+  "toolPermissionInferred": false,
+  "sourceTestsBuildsHostEffects": false
+}

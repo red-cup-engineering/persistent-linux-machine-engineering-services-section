@@ -1,0 +1,72 @@
+{
+  "type": "IndependentNativeWslCapacityLaunchReceiving",
+  "version": 1,
+  "subject": "https://github.com/red-cup-engineering/computer-operating-system-services-section/issues/7",
+  "sourceOriginal": {
+    "repository": "red-cup-engineering/computer-operating-system-services-section",
+    "commit": "98092c2140e3db61b1efe32372af12494a15572b",
+    "subtree": "4a5861dd1f5772adb768da8ab68a3244a4d6d3ba"
+  },
+  "sourceChange": "Default execFileSync children receive cwd:p.linuxMount; original validator requires /",
+  "sourceBeforeSHA256": "5b04c9ba24a611a62fa13a1a11de0ce7ed25ada22463e86b3b1983767a586c01",
+  "sourceAfterSHA256": "a9796b0ee65fd8527392f1f8b6f19a39269d441ce75b6a2126655dbf120c989c",
+  "originalFailure": true,
+  "nativePositive": true,
+  "nativeGenuineRefusal": true,
+  "homePreserved": true,
+  "codexHomePreserved": true,
+  "scope": {
+    "unit": "wsl-capacity-cwd-receiving-20261021-v1.scope",
+    "invocation": "4aee3e8754b44da7b5c3e8348702c73c",
+    "terminal": true,
+    "emptyControlGroup": true,
+    "allocation": {
+      "memoryBytes": 2147483648,
+      "cpuPercent": 100,
+      "seconds": 60,
+      "maxBytes": 1048576
+    }
+  },
+  "evidence": [
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/native-cwd-inputs.json",
+      "sha256": "d3d26ff1cc6facf097ed250220f4b75e0a144da2ca8b616d1b1fad18895c5104",
+      "bytes": 21035
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/actual-native-cwd-dispatch.txt",
+      "sha256": "1214636fbe5ad484bd8a7f0770c278d9b0dd760630d54ed68c06cea5aa7b2d7f",
+      "bytes": 43796
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/actual-native-cwd-terminal-scope.txt",
+      "sha256": "4ed5c09a36fcdf9396f24bd85a0764e03aa5f46cf038b266bf1794063befde7e",
+      "bytes": 64
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/native-cwd-receiving-v1/receiving.json",
+      "sha256": "dd85b309abc8111a96a88dffa054e35a327ecb5a181447e4ce8b03820ccafbb8",
+      "bytes": 22095
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/native-cwd-receiving-v1/original-long-cwd.json",
+      "sha256": "9d04a7b43884659b2be14d01be146ae557118ef48d6e2def13b0a096f86c859a",
+      "bytes": 12758
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/native-cwd-receiving-v1/candidate-long-cwd.json",
+      "sha256": "a3921dd2c5eac81b1a54aa1aa66688651bd56d428b80ea21d8d94ffaab31673f",
+      "bytes": 3472
+    },
+    {
+      "path": "/home/emsenn/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/services/wsl-host-service/data/logs/wsl-compaction-recovery-logs/2026-10-21-exact-distribution-v1/native-cwd-receiving-v1/candidate-wrong-volume.json",
+      "sha256": "3f7e18c0928d6b7ab5181ffa2e9cd232425a898f3aa2d95706ac47e05b155e17",
+      "bytes": 14037
+    }
+  ],
+  "limits": [
+    "Original native capacity port only; full package test and standalone source integration remain separate",
+    "Native snapshot is not a reservation or an admission of a new material stage",
+    "Capacity increased externally; no cleanup, compaction or host configuration action occurred"
+  ]
+}
