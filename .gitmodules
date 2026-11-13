@@ -3,7 +3,3 @@
 	url = https://github.com/red-cup-engineering/guix-machine-release-service.git
 	branch = main
 
-[submodule "services/wsl-host-service"]
-	path = services/wsl-host-service
-	url = https://github.com/red-cup-engineering/wsl-host-service.git
-	branch = main
