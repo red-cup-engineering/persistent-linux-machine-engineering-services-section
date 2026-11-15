@@ -325,7 +325,22 @@ const workerRunning = (r) => workers(r).length > 0;
 /** Record that apply deferred a change while a job ran (CR-31): the job-completed hook reconciles after that job. */
 const markReconcilePending = (r) => writeFileSync(paths(r).reconcilePending, `${new Date().toISOString()} ${r.name}\n`);
 
+/** Refuse explicit contracts this release cannot execute; never treat them as generic runner records. */
+function unsupportedPhysicalPolicy(record) {
+  if (record.controls?.mode === 'existing-flat') {
+    return { id: 'CR-19 existing-flat controls', status: 'unobserved',
+      detail: 'this release cannot reconcile existing-flat controls; generic apply would change runner custody' };
+  }
+  if (Object.hasOwn(record, 'hostAdmission')) {
+    return { id: 'CR-18 native physical admission', status: 'unobserved',
+      detail: 'this release does not bind the declared native physical admission provider' };
+  }
+  return null;
+}
+
 export function observe(record, options={}) {
+  const unsupported = unsupportedPhysicalPolicy(record);
+  if (unsupported) return [unsupported];
   const items = [];
   const add = (id, ok, detail) => items.push({ id, status: ok ? 'current' : 'drift', detail });
   for (const r of record.runners) {
@@ -582,6 +597,8 @@ export function renderReconcile(record, { node = process.execPath, cli } = {}) {
 }
 
 export async function apply(record, { registrationRun=execFileSync } = {}) {
+  const unsupported = unsupportedPhysicalPolicy(record);
+  if (unsupported) throw Object.assign(new Error(unsupported.detail), { code: 'runner-physical-policy-unavailable' });
   // Every registration identity is checked before anything on the host changes.
   for (const r of record.runners) {
     assertRegistrationIdentity(r);
