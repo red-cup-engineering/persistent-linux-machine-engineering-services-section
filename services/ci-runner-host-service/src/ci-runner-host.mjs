@@ -2,12 +2,13 @@
 // (specifications/requirements.md CR-1..CR-11). Node built-ins only.
 import {
   readFileSync, writeFileSync, existsSync, lstatSync, statSync, readdirSync, mkdirSync, renameSync,
-  rmSync, chmodSync, copyFileSync,
+  rmSync, chmodSync, copyFileSync, constants, openSync, closeSync, fstatSync, readSync,
 } from 'node:fs';
 import { join, dirname, isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 export const SCHEMA = 'ci-runner-host-parameters@1';
 const HOOK_KEY = 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED';
@@ -252,10 +253,88 @@ export function ancestorCeiling(cgroupPath, readMax) {
 
 // ---------- host ----------
 
+const physicalRecordSources = new WeakMap();
+const MAX_RECORD_BYTES = 4 * 1024 * 1024;
+const MAX_PHYSICAL_RECORD_BYTES = 256 * 1024;
+
+function normalizeRecord(record, path) {
+  if (record.schema !== SCHEMA) throw new Error(`${path}: schema is not ${SCHEMA}`);
+  return { ...record, parametersPath: path, runners: record.runners.map(r => ({ ...record.defaults, ...r })) };
+}
+const sourceDigest = bytes => createHash('sha256').update(bytes).digest('hex');
+const fileIdentity = stat => [stat.dev, stat.ino, stat.uid, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+
+/** Read one bounded regular descriptor without waiting on a named pipe. */
+function readRecordBytes(path, limit, inspect) {
+  const initial = inspect && fileIdentity(inspect());
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK | (inspect ? constants.O_NOFOLLOW : 0));
+  try {
+    const stat = fstatSync(fd, { bigint: true });
+    const identity = fileIdentity(stat);
+    if (!stat.isFile() || stat.size > BigInt(limit) || (initial && initial !== identity))
+      throw new Error('unqualified runner parameter file');
+    const buffer = Buffer.alloc(Number(stat.size) + 1);
+    let count = 0;
+    while (count < buffer.length) {
+      const received = readSync(fd, buffer, count, buffer.length - count, null);
+      if (received === 0) break;
+      count += received;
+    }
+    if (count !== Number(stat.size) || fileIdentity(fstatSync(fd, { bigint: true })) !== identity ||
+        (inspect && fileIdentity(inspect()) !== identity)) throw new Error('runner parameter file changed during read');
+    return { identity, bytes: buffer.subarray(0, count) };
+  } finally { closeSync(fd); }
+}
+
+/** Bounded, owner-custodied source read, not a provider observation or authorization. */
+function readPhysicalRecord(path) {
+  if (!isAbsolute(path) || resolve(path) !== path || /[\x00-\x1f]/u.test(path)) throw new Error('noncanonical source path');
+  const uid = BigInt(process.getuid());
+  function inspect() {
+    let at = path;
+    let leaf;
+    for (;;) {
+      const st = lstatSync(at, { bigint: true });
+      const owner = st.uid === uid || st.uid === 0n;
+      const stickyRootDirectory = st.isDirectory() && st.uid === 0n && (st.mode & 0o1000n) !== 0n;
+      if (!owner || st.isSymbolicLink() || ((st.mode & 0o022n) !== 0n && !stickyRootDirectory))
+        throw new Error('unqualified source custody');
+      if (at === path) {
+        if (!st.isFile() || st.size > BigInt(MAX_PHYSICAL_RECORD_BYTES)) throw new Error('unqualified source file');
+        leaf = st;
+      }
+      if (dirname(at) === at) break;
+      at = dirname(at);
+    }
+    return leaf;
+  }
+  const { identity, bytes } = readRecordBytes(path, MAX_PHYSICAL_RECORD_BYTES, inspect);
+  return { identity, digest: sourceDigest(bytes) };
+}
+
 export function loadRecord(path) {
-  const rec = JSON.parse(readFileSync(path, 'utf8'));
-  if (rec.schema !== SCHEMA) throw new Error(`${path}: schema is not ${SCHEMA}`);
-  return { ...rec, parametersPath: path, runners: rec.runners.map((r) => ({ ...rec.defaults, ...r })) };
+  const { bytes } = readRecordBytes(path, MAX_RECORD_BYTES);
+  const record = normalizeRecord(JSON.parse(bytes), path);
+  if (record.hostAdmission?.ciParametersPath === path) {
+    try {
+      const input = readPhysicalRecord(path);
+      if (input.digest === sourceDigest(bytes)) {
+        physicalRecordSources.set(record, { path, input, operation: structuredClone(record), targets: physicalTargetPlan(record) });
+      }
+    } catch { /* an unqualified source remains unbound in plan */ }
+  }
+  return record;
+}
+
+function physicalRecordBinding(record, targets) {
+  const bound = physicalRecordSources.get(record);
+  if (!bound || !isDeepStrictEqual(record, bound.operation) || !isDeepStrictEqual(targets, bound.targets)) return null;
+  try {
+    const recheck = readPhysicalRecord(bound.path);
+    return isDeepStrictEqual(recheck, bound.input)
+      ? { type: 'ci-runner-parameter-record.v1', sha256: recheck.digest }
+      : null;
+  } catch { return null; }
 }
 const text = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 const lst = (p) => { try { return lstatSync(p); } catch { return null; } };
@@ -385,10 +464,11 @@ export function observe(record, options={}) {
     if (unsupported.id !== 'CR-18 native physical admission') return [unsupported];
     try {
       const possibleWriteTargets = physicalTargetPlan(record);
-      return [{ ...unsupported, possibleWriteTargets,
-        detail: `${unsupported.detail}; ${possibleWriteTargets.length} possible local write targets, external effects unqualified` }];
+      const parameterRecord = physicalRecordBinding(record, possibleWriteTargets);
+      return [{ ...unsupported, possibleWriteTargets, parameterRecord,
+        detail: `${unsupported.detail}; ${possibleWriteTargets.length} possible local write targets, external effects unqualified; parameter record ${parameterRecord ? 'bound' : 'unbound'}` }];
     } catch {
-      return [{ ...unsupported, possibleWriteTargets: null,
+      return [{ ...unsupported, possibleWriteTargets: null, parameterRecord: null,
         detail: `${unsupported.detail}; local write targets unknown (invalid or over-bound runner layout)` }];
     }
   }

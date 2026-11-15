@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {registrationInvocation,readRunnerRegistration,tarballPath,configureRunner,preflightRunnerRegistration,registerRunner,apply,observe} from '../src/ci-runner-host.mjs';
+import {registrationInvocation,readRunnerRegistration,tarballPath,configureRunner,preflightRunnerRegistration,registerRunner,apply,observe,loadRecord} from '../src/ci-runner-host.mjs';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 const runner={name:'held-runner',scope:'https://github.com/group/private-source',labels:['bare-cedar-fog'],registration:{executable:'/usr/bin/gh'},version:'2.338.0',tarball:'/owner/data/logs/runner.tgz'};
 test('original supplier constructs exact private repository registration without a shell',()=>{
  assert.deepEqual(registrationInvocation(runner,'POST'),{executable:'/usr/bin/gh',args:['api','--hostname','github.com','--method','POST','/repos/group/private-source/actions/runners/registration-token','--jq','.token']});
@@ -137,5 +139,56 @@ test('physical plan traces current local destinations without admitting release 
    assert.equal(refused.status,'unobserved');
    assert.equal(refused.possibleWriteTargets,null,'do not hand over an incomplete target list');
   }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('only an unchanged owner-custodied file binds the normalized physical plan',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-policy-source-'));
+ try{
+  const file=path.join(root,'policy.json'), other=path.join(root,'other.json');
+  const definition={schema:'ci-runner-host-parameters@1',defaults:{...runner,root:path.join(root,'runner')},
+    hostAdmission:{ciParametersPath:file},runners:[{name:'test'}]};
+  const bytes=JSON.stringify(definition,null,2)+'\n';
+  const write=(f,s=bytes)=>fs.writeFileSync(f,s,{mode:0o600});
+  write(file);
+  let record=loadRecord(file);
+  assert.equal(record.runners[0].version,definition.defaults.version);
+  const [plan]=observe(record);
+  assert.equal(plan.status,'unobserved','record provenance is not native evidence');
+  assert.deepEqual(plan.parameterRecord,{type:'ci-runner-parameter-record.v1',sha256:createHash('sha256').update(bytes).digest('hex')});
+  assert.equal(observe({...record})[0].parameterRecord,null,'a caller-provided normalized copy is not custody');
+  const previousTmp=process.env.TMPDIR;
+  try{
+   delete definition.defaults.tarball;
+   write(file,JSON.stringify(definition));record=loadRecord(file);
+   process.env.TMPDIR=path.join(root,'changed-tmpdir');
+   assert.equal(observe(record)[0].parameterRecord,null,'effective path state is part of the binding');
+  }finally{if(previousTmp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=previousTmp;}
+  write(file);record=loadRecord(file);record.runners[0].root=path.join(root,'changed');
+  assert.equal(observe(record)[0].parameterRecord,null,'nested operation mutation is not licensed');
+  record=loadRecord(file);write(file,bytes+' ');
+  assert.equal(observe(record)[0].parameterRecord,null,'same-inode byte changes invalidate the binding');
+  write(file);record=loadRecord(file);write(other);fs.renameSync(other,file);
+  assert.equal(observe(record)[0].parameterRecord,null,'identical bytes on a new inode are not the same source');
+  record=loadRecord(file);fs.chmodSync(file,0o666);
+  assert.equal(observe(record)[0].parameterRecord,null,'changed file mode invalidates custody');
+  assert.equal(observe(loadRecord(file))[0].parameterRecord,null,'untrusted mode cannot issue a receipt');
+  fs.chmodSync(file,0o600);write(other);
+  assert.equal(observe(loadRecord(other))[0].parameterRecord,null,'the declaration must name the opened file');
+  fs.renameSync(file,other);fs.symlinkSync(other,file);
+  assert.equal(observe(loadRecord(file))[0].parameterRecord,null,'redirected parameter records are unbound');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('loadRecord refuses oversized and non-regular parameter input without waiting',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-parameter-reader-'));
+ try{
+  assert.throws(()=>loadRecord(root),/unqualified runner parameter file/);
+  const large=path.join(root,'large.json');fs.writeFileSync(large,'');
+  fs.truncateSync(large,4*1024*1024+1);
+  assert.throws(()=>loadRecord(large),/unqualified runner parameter file/);
+  const pipe=path.join(root,'source.pipe');
+  execFileSync('mkfifo',[pipe],{timeout:2000});
+  assert.throws(()=>loadRecord(pipe),/unqualified runner parameter file/);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });

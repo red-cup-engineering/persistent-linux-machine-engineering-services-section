@@ -37,3 +37,13 @@ The list contains no capacity evidence. Registration, service-manager effects, t
 child release's behavior and Listener action preparation remain unqualified.
 Unknown or over-bound layouts return no partial list. The refusal stays in
 place regardless of this inventory.
+
+When `hostAdmission.ciParametersPath` names the canonical file opened by
+`loadRecord`, the plan can also return a `parameterRecord` digest. The file
+and custody are checked again before the receipt is returned; changed raw
+bytes, file identity, normalized parameters or effective target paths leave
+the plan unbound. This is source provenance only. It is not a physical
+capacity receipt, reservation, or permission to run `apply`.
+The Linux parameter loader refuses nonregular and over-4 MiB files before
+parsing. The stricter provenance read additionally requires a canonical
+owner-custodied file of at most 256 KiB.
