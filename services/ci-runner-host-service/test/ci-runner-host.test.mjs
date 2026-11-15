@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, symlinkSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, utimesSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { bytes, renderUnit, renderSlice, renderReconcile, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion, diskMeasurementIsCurrent } from '../src/ci-runner-host.mjs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { bytes, renderUnit, renderSlice, renderReconcile, renderHook, mergeEnv, workspacesToRemove, ancestorCeiling, paths, isVersion, diskMeasurementIsCurrent, measureRunnerDisk } from '../src/ci-runner-host.mjs';
 
 const r = {
   name: 'box', scope: 'https://github.com/o/r', version: '2.0.0', root: '/srv/ci/box',
@@ -145,7 +145,56 @@ test('a disk measurement is read from its record until it is older than the meas
   assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-10-31T11:00:00Z', total: 5 }, now, 24), false);
   assert.equal(diskMeasurementIsCurrent({ measuredAt: 'not a date', total: 5 }, now, 24), false);
   assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-11-01T01:00:00Z' }, now, 24), false);
+  assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-11-01T13:00:00Z', total: 5 }, now, 24), false);
+  assert.equal(diskMeasurementIsCurrent({ measuredAt: '2026-11-01T01:00:00Z', total: -1 }, now, 24), false);
   assert.equal(diskMeasurementIsCurrent(null, now, 24), false);
+});
+
+test('a failed runner disk reading is unknown and does not replace its cache', () => {
+  const root = mkdtempSync(join(tmpdir(), 'runner-disk-receiving-'));
+  try {
+    const cache = join(root, 'disk-usage.json');
+    const legacy = '{"measuredAt":"2026-11-01T11:01:00Z","total":0}\n';
+    writeFileSync(cache, legacy);
+    const r = { root }, p = { work: join(root, 'work'), diag: join(root, 'diag') };
+    const now = () => Date.parse('2026-11-01T12:00:00Z');
+    assert.equal(measureRunnerDisk(r, p, { now, measure: () => assert.fail('plan is read-only') }), null);
+    const failure = measureRunnerDisk(r, p, { now, refresh: true, measure() {
+      throw Object.assign(new Error('disk read refused'), { code: 'EIO' });
+    } });
+    assert.equal(failure, null);
+    assert.equal(readFileSync(cache, 'utf8'), legacy);
+    // An older zero (previously also returned on every measurement error)
+    // is not evidence. A positive native observation can replace it.
+    let calls = 0;
+    const measured = measureRunnerDisk(r, p, { now, refresh: true, measure() { return ++calls * 10; } });
+    assert.equal(measured.total, 10);
+    assert.equal(calls, 3);
+    assert.deepEqual(measureRunnerDisk(r, p, { now, measure: () => assert.fail('must reuse valid cache') }), measured);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the actual plan command does not walk or write an unmeasured runner disk', () => {
+  const root = mkdtempSync(join(tmpdir(), 'runner-disk-plan-'));
+  try {
+    const runner = join(root, 'runner'), bin = join(root, 'bin'), marker = join(root, 'measurement-ran');
+    mkdirSync(runner);
+    mkdirSync(bin);
+    for (const name of ['systemctl', 'journalctl'])
+      writeFileSync(join(bin, name), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+    writeFileSync(join(bin, 'ionice'), '#!/bin/sh\n: > "$MEASUREMENT_MARKER"\nexit 1\n', { mode: 0o700 });
+    const parameters = join(root, 'runner.json');
+    writeFileSync(parameters, JSON.stringify({ schema: 'ci-runner-host-parameters@1',
+      runners: [{ ...r, root: runner, maxBytes: '100G' }] }));
+    const cli = new URL('../scripts/ci-runner-host.mjs', import.meta.url);
+    const result = spawnSync(process.execPath, [cli.pathname, 'plan', `--parameters=${parameters}`], {
+      env: { PATH: bin, HOME: root, MEASUREMENT_MARKER: marker }, encoding: 'utf8', timeout: 5000,
+    });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stdout, /unobserved\s+CR-10.*no current measured runner usage receipt/u);
+    assert.equal(existsSync(marker), false, 'plan cannot launch the usage measurement');
+    assert.equal(existsSync(join(runner, 'disk-usage.json')), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('the reconcile runs when its record changes, never on a calendar (CR-30)', () => {
