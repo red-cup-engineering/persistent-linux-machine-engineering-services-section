@@ -4,7 +4,7 @@ import {
   readFileSync, writeFileSync, existsSync, lstatSync, statSync, readdirSync, mkdirSync, renameSync,
   rmSync, chmodSync, copyFileSync,
 } from 'node:fs';
-import { join, dirname, isAbsolute } from 'node:path';
+import { join, dirname, isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -262,6 +262,10 @@ const lst = (p) => { try { return lstatSync(p); } catch { return null; } };
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...opts }).trim();
 const shOk = (cmd, args) => { try { return sh(cmd, args); } catch { return ''; } };
 const unitDir = () => join(homedir(), '.config', 'systemd', 'user');
+const diskReceiptPath = r => join(r.root, 'disk-usage.json');
+const runnerUnitPath = r => join(unitDir(), unitName(r));
+const retiredControlsPath = r => join(unitDir(), `${unitName(r)}.d`, '80-ci-runner-host-controls.conf');
+const reconcileUnitPath = kind => join(unitDir(), `${RECONCILE_UNIT}.${kind}`);
 const GB = (b) => `${(b / 1e9).toFixed(1)} GB`;
 
 const diskBytes = value => Number.isSafeInteger(value) && value >= 0;
@@ -287,7 +291,7 @@ export function diskMeasurementIsCurrent(measurement, nowMs, hours) {
 /** Read a bounded-age usage receipt. Deliberate apply may refresh it;
  * an unreadable measurement is never cached or reported as zero. */
 export function measureRunnerDisk(r, p, { now = Date.now, measure = duBytes, refresh = false } = {}) {
-  const file = join(r.root, 'disk-usage.json');
+  const file = diskReceiptPath(r);
   const at = now();
   let recorded = null;
   try { recorded = JSON.parse(readFileSync(file, 'utf8')); } catch { recorded = null; }
@@ -325,6 +329,43 @@ const workerRunning = (r) => workers(r).length > 0;
 /** Record that apply deferred a change while a job ran (CR-31): the job-completed hook reconciles after that job. */
 const markReconcilePending = (r) => writeFileSync(paths(r).reconcilePending, `${new Date().toISOString()} ${r.name}\n`);
 
+/**
+ * Statically enumerate possible explicit local write targets of generic apply and its CLI receipt.
+ * Child release, service manager, registration, and listener effects are separate from these paths.
+ */
+function physicalTargetPlan(record) {
+  const canonical = (value) => {
+    if (typeof value !== 'string' || !isAbsolute(value) || resolve(value) !== value ||
+        value.length > 4096 || /[\x00-\x1f]/u.test(value)) throw new TypeError('noncanonical target');
+    return value;
+  };
+  const simpleName = value => typeof value === 'string' && /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$/u.test(value);
+  const runners = record.runners;
+  if (!Array.isArray(runners) || runners.length === 0 || runners.length > 16) throw new TypeError('runner set unqualified');
+  const targets = new Set();
+  const names = new Set();
+  for (const r of runners) {
+    if (!simpleName(r.name) || !/^\d+\.\d+\.\d+$/u.test(r.version)) throw new TypeError('runner identity unqualified');
+    if (names.has(r.name)) throw new TypeError('duplicate runner name');
+    names.add(r.name);
+    canonical(r.root);
+    const p = paths(r);
+    for (const path of [p.runner, p.version, tarballPath(r), p.reconcilePending,
+      p.hook, p.startHook, diskReceiptPath(r), runnerUnitPath(r), retiredControlsPath(r)]) targets.add(canonical(path));
+    if (record.sliceMemoryMax) {
+      if (!simpleName(r.slice) || !r.slice.endsWith('.slice')) throw new TypeError('runner slice unqualified');
+      targets.add(canonical(join(unitDir(), r.slice)));
+    }
+  }
+  if (record.reconcile && record.parametersPath) {
+    targets.add(canonical(releasePlan(record.reconcile).root));
+    for (const kind of ['timer', 'service', 'path']) targets.add(canonical(reconcileUnitPath(kind)));
+  }
+  // One original WSL observation accepts at most 32 paths; do not split a cohort to evade this limit.
+  if (targets.size > 32) throw new TypeError('target bound exceeded');
+  return [...targets];
+}
+
 /** Refuse explicit contracts this release cannot execute; never treat them as generic runner records. */
 function unsupportedPhysicalPolicy(record) {
   if (record.controls?.mode === 'existing-flat') {
@@ -340,7 +381,17 @@ function unsupportedPhysicalPolicy(record) {
 
 export function observe(record, options={}) {
   const unsupported = unsupportedPhysicalPolicy(record);
-  if (unsupported) return [unsupported];
+  if (unsupported) {
+    if (unsupported.id !== 'CR-18 native physical admission') return [unsupported];
+    try {
+      const possibleWriteTargets = physicalTargetPlan(record);
+      return [{ ...unsupported, possibleWriteTargets,
+        detail: `${unsupported.detail}; ${possibleWriteTargets.length} possible local write targets, external effects unqualified` }];
+    } catch {
+      return [{ ...unsupported, possibleWriteTargets: null,
+        detail: `${unsupported.detail}; local write targets unknown (invalid or over-bound runner layout)` }];
+    }
+  }
   const items = [];
   const add = (id, ok, detail) => items.push({ id, status: ok ? 'current' : 'drift', detail });
   for (const r of record.runners) {
@@ -620,14 +671,14 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
       return log;
     }
     const units = renderReconcile(record, { cli });
-    const timer = join(unitDir(), `${RECONCILE_UNIT}.timer`);
+    const timer = reconcileUnitPath('timer');
     if (existsSync(timer)) {
       shOk('systemctl', ['--user', 'disable', '--now', `${RECONCILE_UNIT}.timer`]);
       rmSync(timer);
       log.push(`removed ${timer}: the reconcile runs on events, not a calendar`);
     }
-    const changed = [writeIfChanged(join(unitDir(), `${RECONCILE_UNIT}.service`), units.service, log),
-      writeIfChanged(join(unitDir(), `${RECONCILE_UNIT}.path`), units.path, log)].some(Boolean);
+    const changed = [writeIfChanged(reconcileUnitPath('service'), units.service, log),
+      writeIfChanged(reconcileUnitPath('path'), units.path, log)].some(Boolean);
     if (changed) shOk('systemctl', ['--user', 'daemon-reload']);
     shOk('systemctl', ['--user', 'enable', '--now', `${RECONCILE_UNIT}.path`]);
   }
@@ -644,11 +695,11 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     writeIfChanged(p.startHook, renderStartHook(r), log, 0o755);
     // The runner reads .env only when it starts: a changed .env needs a restart (deferred while a job runs).
     const envChanged = writeIfChanged(envPath, mergeEnv(mergeEnv(text(envPath), HOOK_KEY, p.hook), START_HOOK_KEY, p.startHook), log);
-    const unitPath = join(unitDir(), unitName(r));
+    const unitPath = runnerUnitPath(r);
     if (lst(unitPath)?.isSymbolicLink()) rmSync(unitPath);
     let unitChanged = writeIfChanged(unitPath, renderUnit(r), log);
     // Drop-ins from the retired controls-only mode; the unit now carries its own ceilings.
-    const dropIn = join(unitDir(), `${unitName(r)}.d`, '80-ci-runner-host-controls.conf');
+    const dropIn = retiredControlsPath(r);
     if (existsSync(dropIn)) { rmSync(dropIn); log.push(`removed ${dropIn}`); unitChanged = true; }
     if (unitChanged || reload) shOk('systemctl', ['--user', 'daemon-reload']);
     shOk('systemctl', ['--user', 'enable', unitName(r)]);
