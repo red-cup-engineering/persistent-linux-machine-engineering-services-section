@@ -104,3 +104,38 @@ test('plan reports an unsupported physical policy without entering runner observ
   {id:'CR-18 native physical admission',status:'unobserved'},
  ]);
 });
+
+test('physical plan traces current local destinations without admitting release or job effects',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-target-plan-'));
+ try{
+  const runners=['one','two'].map(name=>({...runner,name,root:path.join(root,name),slice:'ci.slice',tarball:path.join(root,'archive.tgz')}));
+  const record={schema:'ci-runner-host-parameters@1',hostAdmission:{},runners,sliceMemoryMax:'4G',
+   parametersPath:path.join(root,'parameters.json'),
+   reconcile:{source:'https://github.com/group/source.git',commit:'a'.repeat(40),root:path.join(root,'release')}};
+  const [result]=observe(record);
+  assert.equal(result.status,'unobserved');
+  assert.match(result.detail,/external effects unqualified/);
+  const expected=new Set([path.join(root,'archive.tgz'),path.join(root,'versions','2.338.0'),
+   path.join(root,'reconcile-pending'),path.join(root,'release'),
+   ...['ci.slice','ci-runner-host-reconcile.timer','ci-runner-host-reconcile.path','ci-runner-host-reconcile.service']
+     .map(file=>path.join(os.homedir(),'.config/systemd/user',file))]);
+  for(const r of runners){
+   for(const p of [r.root,path.join(r.root,'disk-usage.json'),path.join(root,'hooks',r.name+'-job-started.sh'),
+    path.join(root,'hooks',r.name+'-job-completed.sh'),
+    path.join(os.homedir(),'.config/systemd/user','ci-runner-'+r.name+'.service'),
+    path.join(os.homedir(),'.config/systemd/user','ci-runner-'+r.name+'.service.d/80-ci-runner-host-controls.conf')])expected.add(p);
+  }
+  assert.deepEqual(new Set(result.possibleWriteTargets),expected);
+  assert.equal(result.possibleWriteTargets.length,expected.size);
+  assert.deepEqual(fs.readdirSync(root),[]);
+  for(const bad of [
+   {...record,runners:[{...runners[0],root:root+'/../escape'}]},
+   {...record,runners:[{...runners[0],tarball:'relative.tgz'}]},
+   {...record,runners:Array.from({length:10},(_,i)=>({...runners[0],name:'r'+i,root:path.join(root,'r'+i)}))},
+  ]){
+   const [refused]=observe(bad);
+   assert.equal(refused.status,'unobserved');
+   assert.equal(refused.possibleWriteTargets,null,'do not hand over an incomplete target list');
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

@@ -28,3 +28,12 @@ This release cannot execute records declaring `hostAdmission` or
 policy and exits 2; `apply` refuses before registration or local changes.
 A generic plan is not a physical-capacity observation, and a job-start hook
 does not establish a fence before the runner prepares actions.
+
+For a declared `hostAdmission`, the planning result's
+`possibleWriteTargets` enumerates the current generic controller's possible
+explicit local destinations, including its reconcile checkout and user units.
+An enumerated directory does not attest its descendants or their mounts.
+The list contains no capacity evidence. Registration, service-manager effects, the
+child release's behavior and Listener action preparation remain unqualified.
+Unknown or over-bound layouts return no partial list. The refusal stays in
+place regardless of this inventory.
