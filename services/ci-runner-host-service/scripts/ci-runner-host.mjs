@@ -16,6 +16,6 @@ if (cmd === 'apply') {
   console.log(log.length ? log.join('\n') : 'nothing to change');
   console.log('---');
 }
-const items = observe(record);
+const items = observe(record, { refreshDisk: cmd === 'apply' });
 for (const i of items) console.log(`${i.status.padEnd(8)} ${i.id.padEnd(44)} ${i.detail}`);
 process.exit(items.some((i) => i.status !== 'current') ? 2 : 0);

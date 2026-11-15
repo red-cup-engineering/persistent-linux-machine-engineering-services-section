@@ -264,9 +264,14 @@ const shOk = (cmd, args) => { try { return sh(cmd, args); } catch { return ''; }
 const unitDir = () => join(homedir(), '.config', 'systemd', 'user');
 const GB = (b) => `${(b / 1e9).toFixed(1)} GB`;
 
+const diskBytes = value => Number.isSafeInteger(value) && value >= 0;
+const DISK_MEASUREMENT = 'ci-runner-disk-measurement.v1';
 function duBytes(p) {
-  if (!existsSync(p)) return 0;
-  try { return Number(sh('ionice', ['-c3', 'nice', '-n19', 'du', '-sxb', p]).split(/\s/)[0]); } catch { return 0; }
+  try { lstatSync(p); } catch (error) { if (error?.code === 'ENOENT') return 0; throw error; }
+  const text = sh('ionice', ['-c3', 'nice', '-n19', 'du', '-sxb', p]).split(/\s/)[0];
+  const value = Number(text);
+  if (!/^\d+$/u.test(text) || !diskBytes(value)) throw new Error('invalid runner disk measurement');
+  return value;
 }
 /**
  * Whether a recorded disk measurement is recent enough to read instead of walking the tree again. Walking every
@@ -275,22 +280,37 @@ function duBytes(p) {
  */
 export function diskMeasurementIsCurrent(measurement, nowMs, hours) {
   const at = Date.parse(measurement?.measuredAt ?? '');
-  return Number.isFinite(at) && nowMs - at < hours * 3600e3 && Number.isFinite(measurement.total);
+  return Number.isFinite(at) && Number.isFinite(nowMs) && Number.isFinite(hours) && hours > 0 &&
+    at <= nowMs && nowMs - at < hours * 3600e3 && diskBytes(measurement.total);
 }
 
-/** The runner's disk use, from its record beside the runner when current, otherwise measured once and recorded. */
-function measuredDisk(r, p) {
+/** Read a bounded-age usage receipt. Deliberate apply may refresh it;
+ * an unreadable measurement is never cached or reported as zero. */
+export function measureRunnerDisk(r, p, { now = Date.now, measure = duBytes, refresh = false } = {}) {
   const file = join(r.root, 'disk-usage.json');
+  const at = now();
   let recorded = null;
   try { recorded = JSON.parse(readFileSync(file, 'utf8')); } catch { recorded = null; }
-  if (diskMeasurementIsCurrent(recorded, Date.now(), Number(r.diskMeasureHours ?? 24))) return recorded;
-  const measured = {
-    measuredAt: new Date().toISOString(),
-    total: duBytes(r.root),
-    retained: (r.retain ?? []).reduce((s, k) => s + duBytes(join(p.work, k)), 0),
-    temp: duBytes(join(p.work, '_temp')),
-    diag: duBytes(p.diag),
-  };
+  if (recorded?.kind === DISK_MEASUREMENT && diskMeasurementIsCurrent(recorded, at, Number(r.diskMeasureHours ?? 24)) &&
+      [recorded.retained, recorded.temp, recorded.diag].every(diskBytes)) return recorded;
+  if (!refresh) return null;
+  let measured;
+  try {
+    const read = directory => {
+      const result = measure(directory);
+      if (!diskBytes(result)) throw new Error('invalid runner disk measurement');
+      return result;
+    };
+    measured = {
+      kind: DISK_MEASUREMENT,
+      measuredAt: new Date(at).toISOString(),
+      total: read(r.root),
+      retained: (r.retain ?? []).reduce((s, k) => s + read(join(p.work, k)), 0),
+      temp: read(join(p.work, '_temp')),
+      diag: read(p.diag),
+    };
+    if (!diskBytes(measured.retained)) return null;
+  } catch { return null; }
   try { writeFileSync(file, `${JSON.stringify(measured)}\n`); } catch { /* an unwritable record is measured again next time */ }
   return measured;
 }
@@ -339,10 +359,17 @@ export function observe(record, options={}) {
       ceiling === null ? 'no ancestor cap'
         : ceiling >= bytes(r.memoryMax) ? `nearest ancestor cap ${GB(ceiling)} is above this runner's ${r.memoryMax}`
           : `an ancestor caps memory at ${GB(ceiling)}, below this runner's ${r.memoryMax}: the host's memory budget decides`);
-    const { total, retained, temp, diag, measuredAt } = measuredDisk(r, p);
-    const stray = workspacesToRemove(workEntries(p.work), r.retain ?? [], Number(r.retainRecentDays ?? 0));
-    add(`CR-10 ${tag} disk`, total <= bytes(r.maxBytes) && stray.length === 0,
-      `${GB(total)} of ${r.maxBytes} (measured ${measuredAt}): retained ${GB(retained)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
+    const diskId = `CR-10 ${tag} disk`;
+    const disk = measureRunnerDisk(r, p, { refresh: options.refreshDisk === true });
+    if (disk === null) items.push({ id: diskId, status: 'unobserved', detail: 'no current measured runner usage receipt' });
+    else {
+      const { total, retained, temp, diag, measuredAt } = disk;
+      try {
+        const stray = workspacesToRemove(workEntries(p.work), r.retain ?? [], Number(r.retainRecentDays ?? 0));
+        add(diskId, total <= bytes(r.maxBytes) && stray.length === 0,
+          `${GB(total)} of ${r.maxBytes} (measured ${measuredAt}): retained ${GB(retained)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
+      } catch { items.push({ id: diskId, status: 'unobserved', detail: 'runner workspace inventory could not be read' }); }
+    }
     const jobs = shOk('journalctl', ['--user', '-u', unitName(r), '--since', '-24h', '--no-pager', '-o', 'cat']).split('\n')
       .map((l) => /Job (\S+) \/ \S+ completed with result: (\w+)/.exec(l)).filter(Boolean)
       .reduce((m, [, job, res]) => { m[`${job} ${res}`] = (m[`${job} ${res}`] ?? 0) + 1; return m; }, {});
