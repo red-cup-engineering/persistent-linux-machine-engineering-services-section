@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {registrationInvocation,readRunnerRegistration,tarballPath,configureRunner,preflightRunnerRegistration,registerRunner,apply} from '../src/ci-runner-host.mjs';
+import {registrationInvocation,readRunnerRegistration,tarballPath,configureRunner,preflightRunnerRegistration,registerRunner,apply,observe} from '../src/ci-runner-host.mjs';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
 const runner={name:'held-runner',scope:'https://github.com/group/private-source',labels:['bare-cedar-fog'],registration:{executable:'/usr/bin/gh'},version:'2.338.0',tarball:'/owner/data/logs/runner.tgz'};
 test('original supplier constructs exact private repository registration without a shell',()=>{
@@ -79,4 +79,28 @@ test('missing, offline, wrong-label, incomplete and unavailable runner observati
  assert.equal(read({total_count:1,runners:[{...native,labels:[{name:'other'}]}]}).state,'drift');
  assert.equal(read({total_count:2,runners:[native]}).state,'unknown');
  assert.equal(readRunnerRegistration(runner,{run:()=>{throw Error('private details must not surface');}}).state,'unknown');
+});
+
+test('explicit CR-18 or CR-19 policies cannot fall through to generic apply', async()=>{
+ for(const policy of [{controls:{mode:'existing-flat'}},{hostAdmission:{}}]){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'runner-policy-'));
+  try{
+   const record={...policy,runners:[{...runner,root}]};
+   let calls=0;
+   await assert.rejects(()=>apply(record,{registrationRun:()=>{calls++;throw new Error('fixture supplier');}}),
+     {code:'runner-physical-policy-unavailable'});
+   assert.equal(calls,0,'refuse before the registration supplier');
+   assert.deepEqual(fs.readdirSync(root),[],'refuse before local mutation');
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+});
+
+test('plan reports an unsupported physical policy without entering runner observation',()=>{
+ const record={controls:{mode:'existing-flat'},get runners(){assert.fail('unsupported controls must not enter generic runner observation');}};
+ assert.deepEqual(observe(record).map(({id,status})=>({id,status})),[
+  {id:'CR-19 existing-flat controls',status:'unobserved'},
+ ]);
+ assert.deepEqual(observe({hostAdmission:{},runners:[]}).map(({id,status})=>({id,status})),[
+  {id:'CR-18 native physical admission',status:'unobserved'},
+ ]);
 });

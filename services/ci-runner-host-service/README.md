@@ -19,3 +19,12 @@ To make another box a CI endpoint, write it a record (scope, name, labels, root,
 Bare Cedar Fog's record: `bare-cedar-fog/data/records/service-records/ci-runner-host-service-records/bare-cedar-fog/ci-runner-host.json`. Its `defaults` apply to every runner; one runner per Group organization serves that organization's private repositories.
 
 Requirements: `specifications/requirements.md`. Design: `specifications/design.md`.
+
+
+## Explicit physical-admission records
+
+This release cannot execute records declaring `hostAdmission` or
+`controls.mode: existing-flat`. For those records, `plan` reports the unsupported
+policy and exits 2; `apply` refuses before registration or local changes.
+A generic plan is not a physical-capacity observation, and a job-start hook
+does not establish a fence before the runner prepares actions.
