@@ -1,0 +1,5 @@
+[submodule "services/guix-machine-release-service"]
+	path = services/guix-machine-release-service
+	url = https://github.com/red-cup-engineering/guix-machine-release-service.git
+	branch = main
+
