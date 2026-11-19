@@ -16,5 +16,8 @@
   },
   "exports": {
     ".": "./src/ci-runner-host.mjs"
+  },
+  "dependencies": {
+    "@red-cup-engineering/git-engine": "^0.1.11-dev.0"
   }
 }

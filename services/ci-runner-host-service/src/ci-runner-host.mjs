@@ -26,6 +26,7 @@ export function bytes(size) {
 }
 
 import {unitName,paths,tarballPath} from './runner-layout.mjs';
+import { execGitSync } from '@red-cup-engineering/git-engine/git-process';
 export {unitName,paths,tarballPath} from './runner-layout.mjs';
 
 /** The original GitHub supplier has fixed scope-bound methods, never a shell. */
@@ -710,10 +711,10 @@ export function releasePlan(reconcile) {
 }
 function ensureRelease(reconcile, log) {
   const { source, commit, root, cli } = releasePlan(reconcile);
-  const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const git = (...args) => execGitSync(['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   if (!existsSync(join(root, '.git'))) {
     mkdirSync(root, { recursive: true });
-    execFileSync('git', ['clone', '--quiet', '--filter=blob:none', '--no-checkout', source, root], { stdio: ['ignore', 'ignore', 'pipe'] });
+    execGitSync(['clone', '--quiet', '--filter=blob:none', '--no-checkout', source, root], { stdio: ['ignore', 'ignore', 'pipe'] });
     git('sparse-checkout', 'set', '--no-cone', '/services/ci-runner-host-service/');
     log.push(`cloned the service release into ${root}`);
   }
