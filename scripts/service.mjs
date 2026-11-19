@@ -38,7 +38,7 @@ export function createLinuxMachineCommandExecutionQueue() {
 export function serializeLinuxMachineCommandExecution(queue, request) {
   return queue.enqueue(() => {
     const startedAt = performance.now();
-    const receipt = executeJavascriptNodeCommand(request);
-    return { ...receipt, durationMs: Math.round(performance.now() - startedAt) };
+    const record = executeJavascriptNodeCommand(request);
+    return { ...record, durationMs: Math.round(performance.now() - startedAt) };
   });
 }
