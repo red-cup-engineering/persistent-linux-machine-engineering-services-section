@@ -371,9 +371,9 @@ const lst = (p) => { try { return lstatSync(p); } catch { return null; } };
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...opts }).trim();
 const shOk = (cmd, args) => { try { return sh(cmd, args); } catch { return ''; } };
 const unitDir = () => join(homedir(), '.config', 'systemd', 'user');
-const diskRecordPath = r => join(r.root, 'disk-usage.json');
+const diskReceiptPath = r => join(r.root, 'disk-usage.json');
 const runnerUnitPath = r => join(unitDir(), unitName(r));
-const removedControlsPath = r => join(unitDir(), `${unitName(r)}.d`, '80-ci-runner-host-controls.conf');
+const retiredControlsPath = r => join(unitDir(), `${unitName(r)}.d`, '80-ci-runner-host-controls.conf');
 const reconcileUnitPath = kind => join(unitDir(), `${RECONCILE_UNIT}.${kind}`);
 const GB = (b) => `${(b / 1e9).toFixed(1)} GB`;
 
@@ -400,7 +400,7 @@ export function diskMeasurementIsCurrent(measurement, nowMs, hours) {
 /** Read a bounded-age usage receipt. Deliberate apply may refresh it;
  * an unreadable measurement is never cached or reported as zero. */
 export function measureRunnerDisk(r, p, { now = Date.now, measure = duBytes, refresh = false } = {}) {
-  const file = diskRecordPath(r);
+  const file = diskReceiptPath(r);
   const at = now();
   let recorded = null;
   try { recorded = JSON.parse(readFileSync(file, 'utf8')); } catch { recorded = null; }
@@ -460,7 +460,7 @@ function physicalTargetPlan(record) {
     canonical(r.root);
     const p = paths(r);
     for (const path of [p.runner, p.version, tarballPath(r), p.reconcilePending,
-      p.hook, p.startHook, diskRecordPath(r), runnerUnitPath(r), removedControlsPath(r)]) targets.add(canonical(path));
+      p.hook, p.startHook, diskReceiptPath(r), runnerUnitPath(r), retiredControlsPath(r)]) targets.add(canonical(path));
     if (record.sliceMemoryMax) {
       if (!simpleName(r.slice) || !r.slice.endsWith('.slice')) throw new TypeError('runner slice unqualified');
       targets.add(canonical(join(unitDir(), r.slice)));
@@ -539,11 +539,11 @@ export function observe(record, options={}) {
     const disk = measureRunnerDisk(r, p, { refresh: options.refreshDisk === true });
     if (disk === null) items.push({ id: diskId, status: 'unobserved', detail: 'no current measured runner usage receipt' });
     else {
-      const { total, retained: kept, temp, diag, measuredAt } = disk;
+      const { total, retained, temp, diag, measuredAt } = disk;
       try {
         const stray = workspacesToRemove(workEntries(p.work), r.retain ?? [], Number(r.retainRecentDays ?? 0));
         add(diskId, total <= bytes(r.maxBytes) && stray.length === 0,
-          `${GB(total)} of ${r.maxBytes} (measured ${measuredAt}): retained ${GB(kept)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
+          `${GB(total)} of ${r.maxBytes} (measured ${measuredAt}): retained ${GB(retained)}, temp ${GB(temp)}, diag ${GB(diag)}${stray.length ? `; ${stray.length} unretained workspaces` : ''}`);
       } catch { items.push({ id: diskId, status: 'unobserved', detail: 'runner workspace inventory could not be read' }); }
     }
     const jobs = shOk('journalctl', ['--user', '-u', unitName(r), '--since', '-24h', '--no-pager', '-o', 'cat']).split('\n')
@@ -813,7 +813,7 @@ export async function apply(record, { registrationRun=execFileSync } = {}) {
     if (lst(unitPath)?.isSymbolicLink()) rmSync(unitPath);
     let unitChanged = writeIfChanged(unitPath, renderUnit(r), log);
     // Drop-ins from the retired controls-only mode; the unit now carries its own ceilings.
-    const dropIn = removedControlsPath(r);
+    const dropIn = retiredControlsPath(r);
     if (existsSync(dropIn)) { rmSync(dropIn); log.push(`removed ${dropIn}`); unitChanged = true; }
     if (unitChanged || reload) shOk('systemctl', ['--user', 'daemon-reload']);
     shOk('systemctl', ['--user', 'enable', unitName(r)]);

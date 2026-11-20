@@ -272,9 +272,9 @@ export function advanceUserManagerMaintenance(request,action,port=nativeUserMana
   if(p.phase!=='stopping')fail('restart requires observed stopping phase');receiveManager(p,port);stopped();
   const group=port.controllerGroup();if(group.includes(p.manager.ControlGroup+'/')||group.endsWith('::'+p.manager.ControlGroup))fail('restart controller is inside affected manager subtree');
   for(const name of p.serviceFiles)receiveOwnGuard(c,name);
-  const removedTransientInvocations=p.units.filter(x=>transientUnit(p,x.Id)).map(x=>receiveTerminalTransient(p,x.Id,port));
-  const removedNames=new Set(removedTransientInvocations.map(x=>x.unit));
-  save({phase:'restarting',restartRequestedAt:new Date().toISOString(),retiredTransientInvocations: removedTransientInvocations,restore:p.restore.filter(name=>!removedNames.has(name)),restorationFences:p.restorationFences.filter(name=>!removedNames.has(name)&&!p.aliases.some(alias=>alias.name===name&&removedNames.has(alias.unit)))});
+  const retiredTransientInvocations=p.units.filter(x=>transientUnit(p,x.Id)).map(x=>receiveTerminalTransient(p,x.Id,port));
+  const retiredNames=new Set(retiredTransientInvocations.map(x=>x.unit));
+  save({phase:'restarting',restartRequestedAt:new Date().toISOString(),retiredTransientInvocations,restore:p.restore.filter(name=>!retiredNames.has(name)),restorationFences:p.restorationFences.filter(name=>!retiredNames.has(name)&&!p.aliases.some(alias=>alias.name===name&&retiredNames.has(alias.unit)))});
   port.restartManager();
  }else if(action==='receive-restart'){
   if(!['restarting','stopping-replacement-activation','restoring-management','management-starting'].includes(p.phase))fail('receiving requires the original restart request');

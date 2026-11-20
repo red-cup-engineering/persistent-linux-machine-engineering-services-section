@@ -40,15 +40,15 @@ export async function readBoundaryConfig(path) {
 //     contents; omit to skip the systemd user-unit scan entirely.
 export async function findWorkspaceBoundaryViolations(config, { home = homedir() } = {}) {
   const violations = [];
-  const removedHomeEntries = config.retiredHomeEntries ?? [];
-  const removedStateEntries = config.retiredStateEntries ?? [];
+  const retiredHomeEntries = config.retiredHomeEntries ?? [];
+  const retiredStateEntries = config.retiredStateEntries ?? [];
 
-  for (const entry of removedHomeEntries) {
+  for (const entry of retiredHomeEntries) {
     const path = resolve(home, entry);
     if (await exists(path)) violations.push(path);
   }
 
-  for (const segments of removedStateEntries) {
+  for (const segments of retiredStateEntries) {
     const path = resolve(home, ...segments);
     if (await exists(path)) violations.push(path);
   }
