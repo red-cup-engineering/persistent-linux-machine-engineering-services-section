@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { sha256Hex } from "@red-cup-engineering/semiotic-content-address-system";
 /** Exact native systemd user-manager maintenance. Existing unit files and
  * application state remain with their owners. Completed invocations are fenced
  * throughout ordinary-service restoration; future jobs retain their own law.
@@ -10,7 +11,7 @@ import {readFileSync,lstatSync,realpathSync,readlinkSync,existsSync,mkdirSync,op
 import {dirname,join,resolve,basename} from 'node:path';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 
-const hash=x=>createHash('sha256').update(x).digest('hex');
+
 const fail=message=>{throw Error('user-manager maintenance: '+message)};
 const equal=(a,b,message)=>{if(JSON.stringify(a)!==JSON.stringify(b))fail(message)};
 const service=name=>/^[A-Za-z0-9_][A-Za-z0-9_.@\\:-]*\.service$/.test(name);
@@ -31,7 +32,7 @@ export function nativeUserManagerPort(request){
   runtime:()=>request.runtimeDirectory,
   manager:()=>{const u=parse(run('/usr/bin/systemctl',['show',request.managerUnit,'--property='+properties]));if(u.MainPID&&u.MainPID!=='0'){const p='/proc/'+u.MainPID,argv=readFileSync(p+'/cmdline','utf8').split('\0');u.OwnerUid=lstatSync(p).uid;u.SystemdUser=basename(readlinkSync(p+'/exe'))==='systemd'&&argv.includes('--user')&&!argv.includes('--system');const stat=readFileSync(p+'/stat','utf8');u.ProcessStart=stat.slice(stat.lastIndexOf(')')+2).split(' ')[19];u.RuntimeDirectory=readFileSync(p+'/environ','utf8').split('\0').find(x=>x.startsWith('XDG_RUNTIME_DIR='))?.slice(16)}return u},
   apiManagerPid:()=>connectionPid('org.freedesktop.systemd1'),apiBusPid:()=>connectionPid('org.freedesktop.DBus'),
-  environmentDigests:names=>{let data;try{data=JSON.parse(user('show-environment','--output=json'))}catch{fail('typed native manager environment unreadable')}return names.map(name=>({name,sha256:typeof data[name]==='string'?hash(data[name]):null}))},
+  environmentDigests:names=>{let data;try{data=JSON.parse(user('show-environment','--output=json'))}catch{fail('typed native manager environment unreadable')}return names.map(name=>({name,sha256:typeof data[name]==='string'?sha256Hex(data[name]):null}))},
   controllerGroup:()=>readFileSync('/proc/self/cgroup','utf8').trim(),
   processAbsent:pid=>!existsSync('/proc/'+pid),
   unit:name=>parse(user('show',name,'--property='+properties)),
@@ -62,7 +63,7 @@ function privateDirectory(path,uid){
 function fileIdentity(path){
  const st=lstatSync(path),target=realpathSync(path),regular=lstatSync(target);
  if(!regular.isFile()||regular.size>1024*1024)fail('unreadable native configuration '+path);
- return {path,target,link:st.isSymbolicLink()?readlinkSync(path):null,uid:st.uid,mode:st.mode,sha256:hash(readFileSync(target))};
+ return {path,target,link:st.isSymbolicLink()?readlinkSync(path):null,uid:st.uid,mode:st.mode,sha256:sha256Hex(readFileSync(target))};
 }
 function inputIdentity({path,optional=false}){
  if(resolve(path)!==path)fail('canonical original input path required');
@@ -115,8 +116,8 @@ function receiveFileIdentities(plan,port){
  for(const p of plan.profiles)equal(profileIdentity(p.path),p,'selected profile changed: '+p.path);
 }
 function receiveBindings(c,plan,port){
- const falseCondition=hash(JSON.stringify(['/usr/bin/false',['/usr/bin/false'],false]));
- const unitCondition=hash(JSON.stringify(['ConditionPathExists',false,true,c.path]));
+ const falseCondition=sha256Hex(JSON.stringify(['/usr/bin/false',['/usr/bin/false'],false]));
+ const unitCondition=sha256Hex(JSON.stringify(['ConditionPathExists',false,true,c.path]));
  const removeOwned=(actual,expected,digest,count)=>{
   if(actual.length!==expected.length+count)fail('native input or credential binding changed');
   const kept=[];let next=0,removed=0;
@@ -165,7 +166,7 @@ function receiveGuardDirectory(path,uid){
 function receiveLoadedGuard(c,name,port,{api=true}={}){
  const u=port.unit(name),p=receiveOwnGuard(c,name);
  if(!(u.DropInPaths||'').split(' ').includes(p)||u.Restart!=='no'||!(u.ExecCondition||'').includes('path=/usr/bin/false '))fail('native restart fence not loaded '+name);
- if(api&&!port.bindings(name).unitConditionSha256.includes(hash(JSON.stringify(['ConditionPathExists',false,true,c.path]))))fail('native negative admission condition not loaded '+name);
+ if(api&&!port.bindings(name).unitConditionSha256.includes(sha256Hex(JSON.stringify(['ConditionPathExists',false,true,c.path]))))fail('native negative admission condition not loaded '+name);
 }
 
 /** Observe native scope before writing any guard. No authority is manufactured
@@ -204,7 +205,7 @@ function captureUserManagerMaintenance(request,port,restorationOwed=[]){
 export function planUserManagerMaintenance(request,port=nativeUserManagerPort(request)){
  const{c,value}=captureUserManagerMaintenance(request,port);
  if(existsSync(c.path))fail('original maintenance outcome already exists; observe its phase');
- atomic(c.path,value);return {phase:value.phase,outcome:c.path,sha256:hash(readFileSync(c.path)),running:value.restore,held:value.held,completed:value.completed};
+ atomic(c.path,value);return {phase:value.phase,outcome:c.path,sha256:sha256Hex(readFileSync(c.path)),running:value.restore,held:value.held,completed:value.completed};
 }
 
 /** Advance a known phase once. A failed or unreceived effect is observed before
@@ -230,10 +231,10 @@ export function advanceUserManagerMaintenance(request,action,port=nativeUserMana
   if(!old||transientUnit(p,old.Id)||!terminal(u)||!empty(u)||u.FreezerState!=='running')fail('original management transport is not terminal');
   equal([u.FragmentPath,u.DropInPaths,u.Type,u.Restart],[old.FragmentPath,old.DropInPaths,old.Type,old.Restart],'original management configuration changed');
   if(old.MainPID!=='0'&&!port.processAbsent(old.MainPID))fail('original management process remains');
-  const archive=c.path+'.interrupted-'+hash(text)+'.json';
+  const archive=c.path+'.interrupted-'+sha256Hex(text)+'.json';
   if(existsSync(archive))equal(readFileSync(archive,'utf8'),text,'interruption archive changed');else atomic(archive,p);
   equal(readFileSync(archive,'utf8'),text,'original stopping bytes not conserved');
-  save({phase:'recovering-management',interruption:{at:new Date().toISOString(),outcome:archive,sha256:hash(text),ownControlsAbsent:true,actor:'unknown'}});
+  save({phase:'recovering-management',interruption:{at:new Date().toISOString(),outcome:archive,sha256:sha256Hex(text),ownControlsAbsent:true,actor:'unknown'}});
   port.start([p.managementUnit]);
  }else if(action==='receive-recovery'){
   if(p.phase!=='recovering-management')fail('fresh receiving requires original interruption request');
@@ -323,7 +324,7 @@ export function advanceUserManagerMaintenance(request,action,port=nativeUserMana
   for(const old of p.active.filter(x=>/\.(timer|socket|path)$/.test(x.unit))){const u=port.unit(old.unit);if(u.ActiveState!=='active'||u.Job)fail('original activation unit not received '+old.unit)}
   save({phase:'completed',completedAt:new Date().toISOString(),completedJobsExplicitlyStarted:false});
  }else fail('unknown maintenance action');
- return {phase:p.phase,outcome:c.path,sha256:hash(text),held:p.held,restore:p.restore,applicationDrained:false,externalEffectsReconciled:false};
+ return {phase:p.phase,outcome:c.path,sha256:sha256Hex(text),held:p.held,restore:p.restore,applicationDrained:false,externalEffectsReconciled:false};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){

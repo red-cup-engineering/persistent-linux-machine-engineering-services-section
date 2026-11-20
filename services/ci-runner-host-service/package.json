@@ -18,6 +18,7 @@
     ".": "./src/ci-runner-host.mjs"
   },
   "dependencies": {
-    "@red-cup-engineering/git-engine": "^0.1.11-dev.0"
+    "@red-cup-engineering/git-engine": "^0.1.11-dev.0",
+    "@red-cup-engineering/semiotic-content-address-system": "^0.1.7 || 0.1.8-dev.0"
   }
 }

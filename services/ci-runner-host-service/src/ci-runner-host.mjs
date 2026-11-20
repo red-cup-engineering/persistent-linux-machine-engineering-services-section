@@ -1,3 +1,4 @@
+import { sha256Hex } from "@red-cup-engineering/semiotic-content-address-system";
 // CI runner host service: makes a Linux host a GitHub Actions runner from one parameter record
 // (specifications/requirements.md CR-1..CR-11). Node built-ins only.
 import {
@@ -291,7 +292,7 @@ function normalizeRecord(record, path) {
   });
   return { ...record, parametersPath: path, runners };
 }
-const sourceDigest = bytes => createHash('sha256').update(bytes).digest('hex');
+
 const fileIdentity = stat => [stat.dev, stat.ino, stat.uid, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
 
 /** Read one bounded regular descriptor without waiting on a named pipe. */
@@ -339,7 +340,7 @@ function readPhysicalRecord(path) {
     return leaf;
   }
   const { identity, bytes } = readRecordBytes(path, MAX_PHYSICAL_RECORD_BYTES, inspect);
-  return { identity, digest: sourceDigest(bytes) };
+  return { identity, digest: sha256Hex(bytes) };
 }
 
 export function loadRecord(path) {
@@ -348,7 +349,7 @@ export function loadRecord(path) {
   if (record.hostAdmission?.ciParametersPath === path) {
     try {
       const input = readPhysicalRecord(path);
-      if (input.digest === sourceDigest(bytes)) {
+      if (input.digest === sha256Hex(bytes)) {
         physicalRecordSources.set(record, { path, input, operation: structuredClone(record), targets: physicalTargetPlan(record) });
       }
     } catch { /* an unqualified source remains unbound in plan */ }

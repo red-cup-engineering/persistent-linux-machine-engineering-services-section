@@ -10,7 +10,8 @@
   "dependencies": {
     "@red-cup-engineering/computer-filepath-engineering-services-section": "^0.1.1",
     "@red-cup-engineering/execute-javascript-node-command-service": "^0.4.2",
-    "@red-cup-engineering/computer-file-engineering-services-section": "^0.8.4"
+    "@red-cup-engineering/computer-file-engineering-services-section": "^0.8.4",
+    "@red-cup-engineering/semiotic-content-address-system": "^0.1.7 || 0.1.8-dev.0"
   },
   "exports": {
     "./service": "./scripts/service.mjs",
