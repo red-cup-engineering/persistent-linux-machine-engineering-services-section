@@ -1,0 +1,29 @@
+{
+  "kind": "bare-cedar-fog.workspace-boundary-config",
+  "retiredHomeEntries": [
+    "561",
+    "aagaard",
+    "backups",
+    "backups-from-git",
+    "dev",
+    "info-history-backup.git",
+    "infomaterial-live-backup-20260630-010840",
+    "infomaterial-repair-20260630-010019",
+    "ops",
+    "sites",
+    "src"
+  ],
+  "retiredStateEntries": [
+    [".config", "561-group"],
+    [".config", "blockchain"],
+    [".config", "red-cup-engineering"],
+    [".local", "share", "561-group"],
+    [".local", "share", "emsenn"],
+    [".local", "share", "red-cup-engineering"],
+    [".local", "state", "561-group"],
+    [".local", "state", "emsenn"],
+    [".local", "state", "union"]
+  ],
+  "forbiddenUserUnitPattern": "561-group|bare-cedar-fog|verdaccio|scheduled-activity-delivery",
+  "consumedBy": "persistent-linux-machine-engineering-services-section/scripts/verify-workspace-boundary.mjs --config=<this file>"
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Bare Cedar Fog machine status site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+WorkingDirectory=%h/info/lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/linux-services-section/services/persistent-linux-machine-engineering-services-section/apps/serve-persistent-linux-machine-status-site
+Environment=NODE_ENV=production
+EnvironmentFile=-%h/.config/561-group/bare-cedar-fog-561-group.env
+ExecStart=%h/.local/bin/node scripts/serve.mts --config %h/info/lib/emsenn/services/561-group/services/561-group-services-section/services/561-group-computer-services-section/services/computer-machine-services-section/services/persistent-computer-machine-services-section/services/bare-cedar-fog-services-section/sites/bare-cedar-fog.561.group/config/persistent-linux-machine-status-site.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/info/lib/emsenn/services/561-group/services/561-group-services-section/services/561-group-computer-services-section/services/computer-machine-services-section/services/persistent-computer-machine-services-section/services/bare-cedar-fog-services-section/data/runtime/state/561-group/bare-cedar-fog/oauth
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,73 @@
+{
+  "type": "PersistentLinuxMachineStatusSite",
+  "machine": {
+    "nodeName": "bare-cedar-fog",
+    "displayName": "Bare Cedar Fog",
+    "systemdScope": "local"
+  },
+  "site": {
+    "title": "bare-cedar-fog",
+    "summary": "Status dashboard for the bare-cedar-fog host.",
+    "publicOrigin": "https://bare-cedar-fog.561.group"
+  },
+  "faces": {
+    "mutable": { "host": "127.0.0.1", "port": 19749 },
+    "readOnly": [
+      { "transport": "Cloudflare relay", "host": "127.0.0.1", "port": 19748 },
+      { "transport": "private relay", "host": "100.125.205.105", "port": 19750 }
+    ]
+  },
+  "oauth": {
+    "allowedEmails": ["morgan.sennhauser@gmail.com"],
+    "stateDir": "/home/emsenn/bare-cedar-fog/services/561-group-services-section/services/561-group-computer-services-section/services/computer-machine-services-section/services/persistent-computer-machine-services-section/services/bare-cedar-fog-services-section/data/runtime/state/561-group/bare-cedar-fog/oauth",
+    "clientConfigPath": null,
+    "realm": "bare-cedar-fog-state"
+  },
+  "activityProviders": ["codex", "claude"],
+  "agentCard": {
+    "path": "/home/emsenn/bare-cedar-fog/services/561-group-services-section/services/561-group-computer-services-section/services/computer-machine-services-section/services/persistent-computer-machine-services-section/services/bare-cedar-fog-services-section/services/bare-cedar-fog-inference-services-section/services/bare-cedar-fog-codex-services-section/agents/agent-cards/codex-enterprise.json",
+    "actorName": "codex"
+  },
+  "peer": {
+    "label": "cold-red-gate",
+    "statusUrl": "https://ops.561.group/.well-known/oauth-authorization-server"
+  },
+  "reportProviders": {
+    "colonyUrl": null,
+    "unionUrl": null
+  },
+  "swarmMessages": {
+    "endpoint": "http://127.0.0.1:8796/messages"
+  },
+  "runtimePulse": {
+    "healthUrl": "http://127.0.0.1:19748/healthz",
+    "connectorMetricsUrl": "http://127.0.0.1:20241/metrics",
+    "providerActor": "urn:ame:bare-cedar-fog-dashboard:runtime-health-pulse-provider",
+    "settlementActor": "urn:ame:bare-cedar-fog-dashboard",
+    "colonyActor": "urn:ame:bare-cedar-fog-colony"
+  },
+  "activityPub": {
+    "colonyHost": "bare-cedar-fog.561.group",
+    "publicOrigin": "https://bare-cedar-fog.561.group",
+    "actorRoutes": {},
+    "nodeInfoProviderPort": 8794,
+    "objectProviderPort": null
+  },
+  "x402": {
+    "meteredPathPrefix": "/x402",
+    "providerRoutes": {},
+    "fixedRoutes": [
+      { "method": "POST", "path": "/compute/inference", "upstreamPath": "/inference", "port": 4022 },
+      { "method": "GET", "path": "/compute/status", "upstreamPath": "/status", "port": 4022 },
+      { "method": "POST", "path": "/compute/occupation-entropy", "upstreamPath": "/v1/occupation-entropy", "port": 4022 },
+      { "method": "GET", "path": "/.well-known/brokerage-products", "upstreamPath": "/.well-known/brokerage-products", "port": 4022 },
+      { "method": "POST", "path": "/v1/issuer-evidence", "upstreamPath": "/v1/issuer-evidence", "port": 4022 },
+      { "method": "POST", "path": "/v1/aggressive-alpha", "upstreamPath": "/v1/aggressive-alpha", "port": 4022 },
+      { "method": "POST", "path": "/v1/strategies/synthesize", "upstreamPath": "/v1/strategies/synthesize", "port": 4022 },
+      { "method": "POST", "path": "/v1/paper-intent", "upstreamPath": "/v1/paper-intent", "port": 4022 },
+      { "method": "POST", "path": "/v1/reconcile", "upstreamPath": "/v1/reconcile", "port": 4022 },
+      { "method": "POST", "path": "/v1/alpaca/read", "upstreamPath": "/v1/alpaca/read", "port": 4022 },
+      { "method": "POST", "path": "/v1/alpaca/execute", "upstreamPath": "/v1/alpaca/execute", "port": 4022 }
+    ]
+  }
+}
