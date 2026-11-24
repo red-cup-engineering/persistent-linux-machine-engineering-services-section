@@ -1,0 +1,24 @@
+{
+  "id": "2026-10-27-persistent-linux-machine-engineering-services-section-normalization",
+  "kind": "misfiled-resources-register",
+  "by": "apply-services-section-normalization",
+  "date": "2026-10-27",
+  "moved": [
+    {
+      "from": "data/records/source-origin-records/original-operating-system-subtree-v1.json",
+      "to": "data/records/service-records/source-origin-service-records/original-operating-system-subtree-v1.json",
+      "rule": "eavt-data-law",
+      "sourceSha256": "9a1f8c8136da7b35a090d5dca4722dcfbb7d2b2612ca2d0ef65a206d40b92f61",
+      "destinationSha256": "9a1f8c8136da7b35a090d5dca4722dcfbb7d2b2612ca2d0ef65a206d40b92f61",
+      "byteIdentical": true
+    }
+  ],
+  "owed": [
+    {
+      "rule": "stray-top-level",
+      "reason": "LICENSE/ is not an entry the services-section law knows; its owner decides where it belongs",
+      "directory": ".",
+      "count": 1
+    }
+  ]
+}
