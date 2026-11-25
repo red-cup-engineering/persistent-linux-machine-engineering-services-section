@@ -115,8 +115,9 @@ function receiveFileIdentities(plan,port){
  for(const p of plan.profiles)equal(profileIdentity(p.path),p,'selected profile changed: '+p.path);
 }
 function receiveBindings(c,plan,port){
- const falseCondition=sha256Hex(JSON.stringify(['/usr/bin/false',['/usr/bin/false'],false]));
- const unitCondition=sha256Hex(JSON.stringify(['ConditionPathExists',false,true,c.path]));
+ const nativeUnitConditionSha256=tuple=>sha256Hex(JSON.stringify(tuple)); /* the digest the native service manager's observer reports for a unit condition */
+const falseCondition=nativeUnitConditionSha256(['/usr/bin/false',['/usr/bin/false'],false]);
+ const unitCondition=nativeUnitConditionSha256(['ConditionPathExists',false,true,c.path]);
  const removeOwned=(actual,expected,digest,count)=>{
   if(actual.length!==expected.length+count)fail('native input or credential binding changed');
   const kept=[];let next=0,removed=0;
@@ -165,7 +166,7 @@ function receiveGuardDirectory(path,uid){
 function receiveLoadedGuard(c,name,port,{api=true}={}){
  const u=port.unit(name),p=receiveOwnGuard(c,name);
  if(!(u.DropInPaths||'').split(' ').includes(p)||u.Restart!=='no'||!(u.ExecCondition||'').includes('path=/usr/bin/false '))fail('native restart fence not loaded '+name);
- if(api&&!port.bindings(name).unitConditionSha256.includes(sha256Hex(JSON.stringify(['ConditionPathExists',false,true,c.path]))))fail('native negative admission condition not loaded '+name);
+ if(api&&!port.bindings(name).unitConditionSha256.includes(nativeUnitConditionSha256(['ConditionPathExists',false,true,c.path])))fail('native negative admission condition not loaded '+name);
 }
 
 /** Observe native scope before writing any guard. No authority is manufactured
