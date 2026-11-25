@@ -443,7 +443,7 @@ const markReconcilePending = (r) => writeFileSync(paths(r).reconcilePending, `${
  * Child release, service manager, registration, and listener effects are separate from these paths.
  */
 function physicalTargetPlan(record) {
-  const canonical = (value) => {
+  const requireNormalizedAbsolutePath = (value) => {
     if (typeof value !== 'string' || !isAbsolute(value) || resolve(value) !== value ||
         value.length > 4096 || /[\x00-\x1f]/u.test(value)) throw new TypeError('noncanonical target');
     return value;
@@ -457,18 +457,18 @@ function physicalTargetPlan(record) {
     if (!simpleName(r.name) || !/^\d+\.\d+\.\d+$/u.test(r.version)) throw new TypeError('runner identity unqualified');
     if (names.has(r.name)) throw new TypeError('duplicate runner name');
     names.add(r.name);
-    canonical(r.root);
+    requireNormalizedAbsolutePath(r.root);
     const p = paths(r);
     for (const path of [p.runner, p.version, tarballPath(r), p.reconcilePending,
-      p.hook, p.startHook, diskReceiptPath(r), runnerUnitPath(r), retiredControlsPath(r)]) targets.add(canonical(path));
+      p.hook, p.startHook, diskReceiptPath(r), runnerUnitPath(r), retiredControlsPath(r)]) targets.add(requireNormalizedAbsolutePath(path));
     if (record.sliceMemoryMax) {
       if (!simpleName(r.slice) || !r.slice.endsWith('.slice')) throw new TypeError('runner slice unqualified');
-      targets.add(canonical(join(unitDir(), r.slice)));
+      targets.add(requireNormalizedAbsolutePath(join(unitDir(), r.slice)));
     }
   }
   if (record.reconcile && record.parametersPath) {
-    targets.add(canonical(releasePlan(record.reconcile).root));
-    for (const kind of ['timer', 'service', 'path']) targets.add(canonical(reconcileUnitPath(kind)));
+    targets.add(requireNormalizedAbsolutePath(releasePlan(record.reconcile).root));
+    for (const kind of ['timer', 'service', 'path']) targets.add(requireNormalizedAbsolutePath(reconcileUnitPath(kind)));
   }
   // One original WSL observation accepts at most 32 paths; do not split a cohort to evade this limit.
   if (targets.size > 32) throw new TypeError('target bound exceeded');
