@@ -6,7 +6,6 @@ import { sha256Hex } from "@red-cup-engineering/semiotic-content-address-system"
  * Each effect has a durable preceding phase and a separately observed outcome.
  */
 import {execFileSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {readFileSync,lstatSync,realpathSync,readlinkSync,existsSync,mkdirSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync,unlinkSync} from 'node:fs';
 import {dirname,join,resolve,basename} from 'node:path';
 import {pathToFileURL,fileURLToPath} from 'node:url';

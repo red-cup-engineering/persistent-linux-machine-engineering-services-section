@@ -5,7 +5,6 @@ import { sha256Hex } from "@red-cup-engineering/semiotic-content-address-system"
  */
 import{execFileSync}from'node:child_process';
 import{readFileSync,lstatSync,realpathSync,writeFileSync}from'node:fs';
-import{createHash}from'node:crypto';
 import{resolve,join}from'node:path';
 import{pathToFileURL}from'node:url';
 import{nativeUserManagerPort}from'./user-manager-maintenance.mjs';

@@ -8,7 +8,6 @@ import {
 import { join, dirname, isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 export const SCHEMA = 'ci-runner-host-parameters@1';
@@ -592,7 +591,7 @@ async function ensureVersion(r, log) {
     const archive=Buffer.from(await res.arrayBuffer());
     writeFileSync(tarball, archive);
   }
-  const sum = createHash('sha256').update(readFileSync(tarball)).digest('hex');
+  const sum = sha256Hex(readFileSync(tarball));
   if (sum !== r.sha256) throw new Error(`${tarball}: sha256 ${sum} is not the record's ${r.sha256}`);
   mkdirSync(p.version, { recursive: true });
   execFileSync('tar', ['-xzf', tarball, '-C', p.version]);

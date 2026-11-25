@@ -2,8 +2,8 @@
 /** One bounded original-owner continuation for an outside native controller.
  * A caller's existing deployment lease can span the entire operation.
  */
+import { sha256Hex } from "@red-cup-engineering/semiotic-content-address-system";
 import{readFileSync}from'node:fs';
-import{createHash}from'node:crypto';
 import{resolve}from'node:path';
 import{pathToFileURL}from'node:url';
 import{setTimeout as pause}from'node:timers/promises';
@@ -22,7 +22,7 @@ export async function continueUserManagerMaintenance(request,importer,{port=nati
  while(Date.now()<until){
   const before=JSON.parse(readFileSync(path,'utf8')).phase;
   if(before!==lastPhase){lastPhase=before;phaseSince=Date.now();lastError=undefined;onPhase({phase:before,outcome:path})}
-  if(before==='completed')return{phase:before,outcome:path,sha256:createHash('sha256').update(readFileSync(path)).digest('hex')};
+  if(before==='completed')return{phase:before,outcome:path,sha256:sha256Hex(readFileSync(path))};
   let action;
   if(before==='stopping'&&interruption){action='recover';interruption=false}
   else if(before==='recovering-management')action='receive-recovery';
@@ -53,6 +53,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const[parameters,environmentParameters,mode,...extra]=process.argv.slice(2);
  if(!parameters||!environmentParameters||extra.length||![undefined,'receive-interruption'].includes(mode))fail('original parameters and import parameters required');
  const request=JSON.parse(readFileSync(parameters,'utf8')),bytes=readFileSync(environmentParameters),input=request.inputs.find(x=>x.path===resolve(environmentParameters));
- if(!input||input.sha256!==createHash('sha256').update(bytes).digest('hex'))fail('import parameters are not bound by original maintenance');
+ if(!input||input.sha256!==sha256Hex(bytes))fail('import parameters are not bound by original maintenance');
  console.log(JSON.stringify(await continueUserManagerMaintenance(request,JSON.parse(bytes),{receiveInterruption:mode==='receive-interruption'})));
 }
